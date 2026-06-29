@@ -51,10 +51,16 @@ export const googleDrive: StorageProvider = {
         grant_type: "authorization_code",
       }),
     });
-    const json = (await res.json()) as GoogleTokenResponse;
+    const bodyText = await res.text();
+    let json: GoogleTokenResponse;
+    try {
+      json = JSON.parse(bodyText) as GoogleTokenResponse;
+    } catch {
+      throw new Error(`Google token exchange failed: ${res.status} ${bodyText}`);
+    }
     if (!res.ok || json.error) {
       throw new Error(
-        `Google token exchange failed: ${json.error_description ?? json.error ?? res.status}`,
+        `Google token exchange failed: ${res.status} ${json.error ?? ""} ${json.error_description ?? bodyText}`,
       );
     }
     return {

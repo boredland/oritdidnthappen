@@ -29,27 +29,35 @@ export async function handleOAuthCallback(
   }
 
   const sp = getProvider(provider);
-  const tokens = await sp.exchangeCode(c.env, code);
-  const folder = await sp.createFolder(
-    tokens.accessToken,
-    `or it didn't happen — ${event.title}`,
-  );
+  try {
+    const tokens = await sp.exchangeCode(c.env, code);
+    const folder = await sp.createFolder(
+      tokens.accessToken,
+      `or it didn't happen — ${event.title}`,
+    );
 
-  const encAccess = await encryptToken(tokens.accessToken, c.env.ENCRYPTION_KEY);
-  const encRefresh = tokens.refreshToken
-    ? await encryptToken(tokens.refreshToken, c.env.ENCRYPTION_KEY)
-    : null;
-  const tokenExpiry = tokens.expiresIn
-    ? Date.now() + tokens.expiresIn * 1000
-    : null;
+    const encAccess = await encryptToken(
+      tokens.accessToken,
+      c.env.ENCRYPTION_KEY,
+    );
+    const encRefresh = tokens.refreshToken
+      ? await encryptToken(tokens.refreshToken, c.env.ENCRYPTION_KEY)
+      : null;
+    const tokenExpiry = tokens.expiresIn
+      ? Date.now() + tokens.expiresIn * 1000
+      : null;
 
-  await setEventStorage(c.env.DB, event.id, {
-    access_token: encAccess,
-    refresh_token: encRefresh,
-    token_expiry: tokenExpiry,
-    folder_id: folder.folderId,
-    folder_url: folder.folderUrl,
-  });
+    await setEventStorage(c.env.DB, event.id, {
+      access_token: encAccess,
+      refresh_token: encRefresh,
+      token_expiry: tokenExpiry,
+      folder_id: folder.folderId,
+      folder_url: folder.folderUrl,
+    });
+  } catch (e) {
+    console.error("OAuth callback failed:", e);
+    return c.redirect(`/create?error=connect_failed`);
+  }
 
   const adminUrl = `${c.env.BASE_URL}/event/${event.id}/admin?token=${event.admin_token}`;
   if (event.host_email) {
