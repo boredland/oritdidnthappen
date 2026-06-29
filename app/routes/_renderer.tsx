@@ -41,7 +41,15 @@ export default jsxRenderer(({ children, title, description }) => {
         <main class="flex-1">{children}</main>
         <footer class="border-t border-sand/40 mt-24">
           <div class="max-w-5xl mx-auto px-6 py-12 text-center text-taupe text-sm tracking-wide">
-            Photos go straight to your cloud. We never store them.
+            <p>Photos go straight to your cloud. We never store them.</p>
+            <p class="mt-3 space-x-4">
+              <a href="/privacy" class="hover:text-charcoal underline-offset-2 hover:underline">
+                Privacy
+              </a>
+              <a href="/terms" class="hover:text-charcoal underline-offset-2 hover:underline">
+                Terms
+              </a>
+            </p>
           </div>
         </footer>
       </body>
