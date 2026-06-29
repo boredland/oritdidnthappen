@@ -1,0 +1,34 @@
+import { createRoute } from "honox/factory";
+import GuestApp, { type PhotoItem } from "../../../islands/GuestApp";
+import { getEventByCode, getPhotosByEvent } from "../../../lib/db";
+
+export default createRoute(async (c) => {
+  const code = c.req.param("code");
+  if (!code) return c.notFound();
+  const event = await getEventByCode(c.env.DB, code);
+  if (!event) return c.notFound();
+
+  const now = Math.floor(Date.now() / 1000);
+  const closed = event.expires_at != null && event.expires_at <= now;
+
+  const rows = await getPhotosByEvent(c.env.DB, event.id, 60, 0);
+  const initialPhotos: PhotoItem[] = rows.map((p) => ({
+    id: p.id,
+    username: p.username,
+    createdAt: p.created_at,
+  }));
+
+  return c.render(
+    <section class="max-w-5xl mx-auto px-6 py-12 md:py-16">
+      <header class="text-center mb-10">
+        <h1 class="font-heading text-4xl md:text-5xl font-light tracking-wide">
+          {event.title}
+        </h1>
+        <p class="text-taupe mt-3">Add your photos to the collection.</p>
+      </header>
+
+      <GuestApp code={event.id} closed={closed} initialPhotos={initialPhotos} />
+    </section>,
+    { title: event.title, description: `Share photos from ${event.title}` },
+  );
+});

@@ -1,0 +1,63 @@
+@import "tailwindcss" source("../app");
+
+@theme {
+  --color-parchment: #f5f0e8;
+  --color-parchment-light: #faf7f2;
+  --color-parchment-dark: #e8e0d4;
+  --color-sand: #d4c9b8;
+  --color-taupe: #8a7e72;
+  --color-charcoal: #3a3632;
+  --color-charcoal-light: #5c5650;
+  --color-ivory: #fffdf7;
+  --color-shagreen: #a8a08a;
+
+  --font-heading: "Cormorant Garamond", Garamond, serif;
+  --font-body: "DM Sans", "Helvetica Neue", sans-serif;
+
+  --default-font-family: var(--font-body);
+}
+
+/*
+ * Jean-Michel Frank — luxe pauvre. Sharp geometry, no rounded corners,
+ * flat color, materiality through texture not ornament.
+ */
+* {
+  border-radius: 0 !important;
+}
+
+html {
+  background-color: var(--color-parchment);
+}
+
+body {
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+/* Parchment-grain overlay for hero surfaces — feTurbulence at low opacity. */
+.grain {
+  position: relative;
+}
+.grain::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0.03;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+
+/* New gallery photos fade in when the polling island prepends them. */
+@keyframes pd-fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.pd-fade-in {
+  animation: pd-fade-in 0.5s ease-out both;
+}

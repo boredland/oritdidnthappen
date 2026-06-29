@@ -1,0 +1,10 @@
+# Copy to .dev.vars for local development, fill real values for OAuth/email.
+GOOGLE_CLIENT_ID=
+GOOGLE_CLIENT_SECRET=
+DROPBOX_CLIENT_ID=
+DROPBOX_CLIENT_SECRET=
+# 32-byte key as 64 hex chars: openssl rand -hex 32
+ENCRYPTION_KEY=
+RESEND_API_KEY=
+EMAIL_FROM=Photo Dump <onboarding@resend.dev>
+BASE_URL=http://localhost:5173

@@ -1,0 +1,28 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "oritdidnthappen",
+  "main": "./dist/index.js",
+  "compatibility_date": "2025-08-03",
+  "compatibility_flags": ["nodejs_compat"],
+  "assets": {
+    "directory": "./dist"
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "oritdidnthappen",
+      "database_id": "00000000-0000-0000-0000-000000000000",
+      "migrations_dir": "migrations"
+    }
+  ],
+  "routes": [
+    { "pattern": "oritdidnthappen.pics", "custom_domain": true }
+  ],
+  "observability": {
+    "enabled": true
+  },
+  "vars": {
+    "BASE_URL": "https://oritdidnthappen.pics",
+    "EMAIL_FROM": "or it didn't happen <noreply@oritdidnthappen.pics>"
+  }
+}

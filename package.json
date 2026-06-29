@@ -1,0 +1,30 @@
+{
+  "name": "oritdidnthappen",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build --mode client && vite build",
+    "preview": "wrangler dev",
+    "deploy": "npm run build && wrangler deploy",
+    "typecheck": "tsc --noEmit",
+    "db:migrate:local": "wrangler d1 migrations apply oritdidnthappen --local",
+    "db:migrate:remote": "wrangler d1 migrations apply oritdidnthappen --remote",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "hono": "^4.12.27",
+    "honox": "^0.1.56"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20260629.1",
+    "@hono/vite-build": "^1.11.1",
+    "@hono/vite-dev-server": "^0.26.0",
+    "@tailwindcss/vite": "^4.3.2",
+    "tailwindcss": "^4.3.2",
+    "typescript": "^5.6.0",
+    "vite": "^8.1.0",
+    "vitest": "^3.0.0",
+    "wrangler": "^4.105.0"
+  }
+}
