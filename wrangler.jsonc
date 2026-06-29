@@ -11,9 +11,12 @@
     {
       "binding": "DB",
       "database_name": "oritdidnthappen",
-      "database_id": "00000000-0000-0000-0000-000000000000",
+      "database_id": "2cde8dbf-2272-4815-bcaf-cb8b1b864c55",
       "migrations_dir": "migrations"
     }
+  ],
+  "send_email": [
+    { "name": "EMAIL" }
   ],
   "routes": [
     { "pattern": "oritdidnthappen.pics", "custom_domain": true }
@@ -23,6 +26,6 @@
   },
   "vars": {
     "BASE_URL": "https://oritdidnthappen.pics",
-    "EMAIL_FROM": "or it didn't happen <noreply@oritdidnthappen.pics>"
+    "EMAIL_FROM": "or it didn't happen <feedback@oritdidnthappen.pics>"
   }
 }

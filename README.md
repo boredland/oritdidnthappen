@@ -39,9 +39,9 @@ scope `https://www.googleapis.com/auth/drive.file`, and add the redirect URI
 scoped access app, permission `files.content.write` + `files.content.read`,
 redirect URI `http://localhost:5173/api/oauth/dropbox`.
 
-**Email (optional)** — [resend.com](https://resend.com): set `RESEND_API_KEY`
-and `EMAIL_FROM`. If unset, the admin link is still shown on-screen after
-storage connects; email is best-effort.
+**Email** — sent via the Cloudflare Email Sending binding (`EMAIL`); no API key.
+Locally, sends are skipped unless you run with the binding in `remote` mode.
+The admin link is always shown on-screen too, so email is best-effort.
 
 ## Deploy (Cloudflare)
 
@@ -60,7 +60,6 @@ wrangler secret put GOOGLE_CLIENT_SECRET
 wrangler secret put DROPBOX_CLIENT_ID
 wrangler secret put DROPBOX_CLIENT_SECRET
 wrangler secret put ENCRYPTION_KEY      # openssl rand -hex 32
-wrangler secret put RESEND_API_KEY
 
 # 3. Build client + server, deploy to the Worker + custom domain
 npm run deploy
@@ -72,9 +71,10 @@ npm run deploy
 - **OAuth redirect URIs** — add to the provider consoles:
   - `https://oritdidnthappen.pics/api/oauth/google`
   - `https://oritdidnthappen.pics/api/oauth/dropbox`
-- **Resend sender** — `EMAIL_FROM` uses `@oritdidnthappen.pics`, so verify the
-  domain in Resend (add its DNS records in Cloudflare) or swap to a verified
-  sender. Email is best-effort; the admin link is always shown on-screen too.
+- **Email** — `EMAIL_FROM` sends from `@oritdidnthappen.pics` via the Cloudflare
+  Email Sending binding. The domain is auto-onboarded when added to Cloudflare
+  (`wrangler email sending list` to confirm). Email is best-effort; the admin
+  link is always shown on-screen too.
 
 ## Architecture
 
@@ -87,7 +87,7 @@ npm run deploy
 | `app/lib/google.ts`, `app/lib/dropbox.ts` | Per-provider OAuth + upload + thumbnail |
 | `app/lib/crypto.ts` | ID generation + AES-256-GCM token encryption |
 | `app/lib/db.ts` | Typed D1 helpers |
-| `app/lib/email.ts` | Resend admin-link delivery |
+| `app/lib/email.ts` | Admin-link delivery via Cloudflare Email Sending binding |
 
 Adding a provider: implement the `StorageProvider` interface in a new
 `app/lib/<provider>.ts`, register it in `PROVIDERS`/`redirectUri` in

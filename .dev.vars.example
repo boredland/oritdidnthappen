@@ -5,6 +5,6 @@ DROPBOX_CLIENT_ID=
 DROPBOX_CLIENT_SECRET=
 # 32-byte key as 64 hex chars: openssl rand -hex 32
 ENCRYPTION_KEY=
-RESEND_API_KEY=
-EMAIL_FROM=Photo Dump <onboarding@resend.dev>
+# Email uses the Cloudflare Email Sending binding (EMAIL) — no key needed.
+EMAIL_FROM=or it didn't happen <feedback@oritdidnthappen.pics>
 BASE_URL=http://localhost:5173

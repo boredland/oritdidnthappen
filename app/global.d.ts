@@ -24,7 +24,7 @@ export type Bindings = {
   DROPBOX_CLIENT_ID: string;
   DROPBOX_CLIENT_SECRET: string;
   ENCRYPTION_KEY: string;
-  RESEND_API_KEY: string;
+  EMAIL: SendEmail;
   EMAIL_FROM: string;
   BASE_URL: string;
 };
