@@ -22,11 +22,11 @@ export default createRoute(async (c) => {
         <h1 class="font-heading text-3xl font-light tracking-wide">
           Invalid admin link
         </h1>
-        <p class="text-taupe mt-4">
+        <p class="text-charcoal-light mt-4">
           This link is missing its access token or it's incorrect.
         </p>
       </section>,
-      { title: "Admin" },
+      { title: "Admin", noindex: true },
     );
   }
 
@@ -100,7 +100,7 @@ export default createRoute(async (c) => {
         />
       </div>
     </section>,
-    { title: `Admin · ${event.title}` },
+    { title: `Admin · ${event.title}`, noindex: true },
   );
 });
 

@@ -81,3 +81,19 @@ body {
 .pd-fade-in {
   animation: pd-fade-in 0.5s ease-out both;
 }
+
+/* Signature: the aperture mark irises open on first load — the camera
+ * metaphor made literal. One deliberate moment; reduced-motion disables it. */
+@keyframes aperture-open {
+  from {
+    opacity: 0;
+    transform: rotate(-45deg) scale(0.7);
+  }
+  to {
+    opacity: 0.9;
+    transform: rotate(0) scale(1);
+  }
+}
+.aperture-open {
+  animation: aperture-open 0.8s cubic-bezier(0.22, 1, 0.36, 1) both;
+}

@@ -69,6 +69,19 @@ export default createRoute((c) => {
       </div>
 
       <div>
+        <H2>Push notifications</H2>
+        <p class="mt-3">
+          If you opt in to new-photo notifications for an event, your browser
+          gives us a push subscription — an endpoint URL provided by your
+          browser's push service (e.g. Google or Mozilla) plus two keys used to
+          encrypt messages to your device. We store these only to notify you
+          when photos are added to that event, and you can turn them off at any
+          time, which deletes the subscription. We never see your identity from
+          a push subscription.
+        </p>
+      </div>
+
+      <div>
         <H2>Deleting data</H2>
         <p class="mt-3">
           Photos live in the host's own cloud, so the host controls them

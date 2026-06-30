@@ -574,7 +574,7 @@ function UsernameControl({
   const ref = useRef<HTMLInputElement | null>(null);
   if (!editing) {
     return (
-      <span class="text-taupe">
+      <span class="text-charcoal-light">
         as <span class="text-charcoal">{username}</span>{" "}
         <button
           type="button"

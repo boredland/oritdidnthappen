@@ -1,10 +1,14 @@
 import { jsxRenderer } from "hono/jsx-renderer";
 import { Link, Script } from "honox/server";
 
-export default jsxRenderer(({ children, title, description, image }) => {
+export default jsxRenderer(({ children, title, description, image, noindex, jsonLd }, c) => {
   const pageTitle = title ? `${title} · or it didn't happen` : "or it didn't happen";
   const desc = description ?? "Share the moment. Together.";
-  const ogImage = image ?? "/logo-512.png";
+  const base = c.env.BASE_URL ?? "https://oritdidnthappen.pics";
+  const canonical = `${base}${c.req.path}`;
+  // Open Graph / Twitter need absolute image URLs or previews silently fail.
+  const rawImage = image ?? "/og-card.png";
+  const ogImage = rawImage.startsWith("http") ? rawImage : `${base}${rawImage}`;
   return (
     <html lang="en">
       <head>
@@ -12,10 +16,18 @@ export default jsxRenderer(({ children, title, description, image }) => {
         <meta name="viewport" content="width=device-width, initial-scale=1.0" />
         <title>{pageTitle}</title>
         <meta name="description" content={desc} />
+        {noindex ? <meta name="robots" content="noindex,nofollow" /> : null}
+        <link rel="canonical" href={canonical} />
         <meta property="og:title" content={pageTitle} />
         <meta property="og:description" content={desc} />
         <meta property="og:type" content="website" />
+        <meta property="og:url" content={canonical} />
         <meta property="og:image" content={ogImage} />
+        <meta property="og:site_name" content="or it didn't happen" />
+        <meta name="twitter:card" content="summary_large_image" />
+        <meta name="twitter:title" content={pageTitle} />
+        <meta name="twitter:description" content={desc} />
+        <meta name="twitter:image" content={ogImage} />
         <link rel="icon" href="/logo.svg" type="image/svg+xml" />
         <link rel="icon" href="/favicon-32.png" sizes="32x32" type="image/png" />
         <link rel="apple-touch-icon" href="/logo-512.png" />
@@ -35,6 +47,12 @@ export default jsxRenderer(({ children, title, description, image }) => {
         />
         <Link href="/app/style.css" rel="stylesheet" />
         <Script src="/app/client.ts" async />
+        {jsonLd ? (
+          <script
+            type="application/ld+json"
+            dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+          />
+        ) : null}
       </head>
       <body class="bg-parchment text-charcoal min-h-screen flex flex-col">
         <header class="border-b border-sand/40">

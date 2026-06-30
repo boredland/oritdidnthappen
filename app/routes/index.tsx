@@ -14,7 +14,7 @@ const STEPS = [
   {
     n: "03",
     title: "Collect",
-    body: "Every photo lands in your Drive. Everyone sees the gallery fill up.",
+    body: "Every photo lands in your own cloud. Everyone sees the gallery fill up.",
   },
 ];
 
@@ -28,7 +28,7 @@ export default createRoute((c) => {
             alt=""
             width="72"
             height="72"
-            class="mx-auto mb-10 opacity-90"
+            class="aperture-open mx-auto mb-10 opacity-90"
           />
           <h1 class="font-heading font-light tracking-wide text-5xl md:text-7xl leading-[1.05] text-balance">
             Share the moment. Together.
@@ -75,5 +75,21 @@ export default createRoute((c) => {
         </div>
       </section>
     </>,
+    {
+      title: "Collect event photos in your own cloud",
+      description:
+        "Collect photos from your guests straight into your own Google Drive or Dropbox. No app, no login — create an event, share one link, and watch the gallery fill up.",
+      jsonLd: {
+        "@context": "https://schema.org",
+        "@type": "WebApplication",
+        name: "or it didn't happen",
+        url: "https://oritdidnthappen.pics",
+        applicationCategory: "PhotographyApplication",
+        operatingSystem: "Any",
+        description:
+          "Event photo collection that uploads guests' photos directly into the host's own Google Drive or Dropbox. No login, no servers storing your photos.",
+        offers: { "@type": "Offer", price: "0", priceCurrency: "USD" },
+      },
+    },
   );
 });

@@ -1,0 +1,6 @@
+User-agent: *
+Allow: /
+Disallow: /event/
+Disallow: /api/
+
+Sitemap: https://oritdidnthappen.pics/sitemap.xml

@@ -51,6 +51,7 @@ export default createRoute(async (c) => {
       title: event.title,
       description: `Share photos from ${event.title}`,
       image: coverUrl ?? undefined,
+      noindex: true,
     },
   );
 });

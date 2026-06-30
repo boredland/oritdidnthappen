@@ -7,7 +7,7 @@ const handler: ErrorHandler = (e, c) => {
       <h1 class="font-heading text-3xl font-light tracking-wide">
         Something went wrong
       </h1>
-      <p class="text-taupe mt-4">
+      <p class="text-charcoal-light mt-4">
         Please try again. If it keeps happening, the event link may be invalid.
       </p>
       <a

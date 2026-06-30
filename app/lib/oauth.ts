@@ -33,7 +33,7 @@ export async function handleOAuthCallback(
     const tokens = await sp.exchangeCode(c.env, code);
     const folder = await sp.createFolder(
       tokens.accessToken,
-      `or it didn't happen — ${event.title}`,
+      event.folder_name ?? `or it didn't happen — ${event.title}`,
     );
 
     const encAccess = await encryptToken(

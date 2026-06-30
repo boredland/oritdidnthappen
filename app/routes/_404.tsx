@@ -7,7 +7,7 @@ const handler: NotFoundHandler = (c) => {
       <h1 class="font-heading text-3xl font-light tracking-wide mt-4">
         Nothing here
       </h1>
-      <p class="text-taupe mt-4">
+      <p class="text-charcoal-light mt-4">
         This page may have expired, or the link is wrong.
       </p>
       <a

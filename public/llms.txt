@@ -1,0 +1,31 @@
+# or it didn't happen
+
+> Event photo collection where guests upload photos straight into the host's
+> own cloud storage (Google Drive or Dropbox). No login, no accounts, and no
+> photos are ever stored on our servers — only small event metadata in a database.
+
+## What it does
+
+- A host creates an event and connects their own Google Drive or Dropbox.
+- The host shares one link with guests.
+- Guests upload photos directly into the host's cloud folder, identified by a
+  chosen or auto-generated username — no sign-up.
+- Everyone sees a live shared gallery; the host can set a cover photo, delete
+  photos, and subscribe guests to new-photo push notifications.
+
+## Privacy posture
+
+- Photos go straight to the host's cloud; we never store them.
+- OAuth tokens are encrypted (AES-256-GCM) at rest.
+- Narrowest permission scope only (Google `drive.file`).
+
+## Key pages
+
+- Home: https://oritdidnthappen.pics/
+- Create an event: https://oritdidnthappen.pics/create
+- Privacy: https://oritdidnthappen.pics/privacy
+- Terms: https://oritdidnthappen.pics/terms
+
+## Contact
+
+feedback@oritdidnthappen.pics

@@ -14,6 +14,7 @@ export interface EventRow {
   created_at: number;
   expires_at: number | null;
   cover_photo_id: string | null;
+  folder_name: string | null;
 }
 
 export interface GuestRow {
@@ -45,15 +46,16 @@ export interface NewEvent {
   host_email: string | null;
   admin_token: string;
   provider: Provider;
+  folder_name: string;
 }
 
 export async function createEvent(db: D1Database, e: NewEvent): Promise<void> {
   await db
     .prepare(
-      `INSERT INTO events (id, title, host_email, admin_token, provider)
-       VALUES (?, ?, ?, ?, ?)`,
+      `INSERT INTO events (id, title, host_email, admin_token, provider, folder_name)
+       VALUES (?, ?, ?, ?, ?, ?)`,
     )
-    .bind(e.id, e.title, e.host_email, e.admin_token, e.provider)
+    .bind(e.id, e.title, e.host_email, e.admin_token, e.provider, e.folder_name)
     .run();
 }
 

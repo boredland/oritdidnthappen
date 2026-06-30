@@ -9,19 +9,30 @@ export const POST = createRoute(async (c) => {
   const body = await c.req.parseBody();
   const title = String(body.title ?? "").trim();
   const email = String(body.email ?? "").trim();
+  const folderInput = String(body.folder ?? "").trim();
   const provider = String(body.provider ?? "google_drive") as Provider;
 
   if (!title || title.length > 100) {
     return c.render(
-      <FormPage error="Please enter an event name (1–100 characters)." />,
+      <FormPage
+        error="Please enter an event name (1–100 characters)."
+        title={title}
+        email={email}
+        folder={folderInput}
+      />,
       { title: "Create event" },
     );
   }
   if (!VALID_PROVIDERS.includes(provider)) {
-    return c.render(<FormPage error="Please choose a storage provider." />, {
-      title: "Create event",
-    });
+    return c.render(
+      <FormPage error="Please choose a storage provider." title={title} email={email} folder={folderInput} />,
+      { title: "Create event" },
+    );
   }
+
+  // The folder the app creates in the host's cloud. Defaults to the event name;
+  // with Google's drive.file scope this is the ONLY folder the app can ever see.
+  const folderName = (folderInput || title).slice(0, 100);
 
   const id = generateId(8);
   const adminToken = generateId(32);
@@ -31,6 +42,7 @@ export const POST = createRoute(async (c) => {
     host_email: email || null,
     admin_token: adminToken,
     provider,
+    folder_name: folderName,
   });
 
   const authUrl = getProvider(provider).getAuthUrl(c.env, id);
@@ -38,16 +50,30 @@ export const POST = createRoute(async (c) => {
 });
 
 export default createRoute((c) => {
-  return c.render(<FormPage />, { title: "Create event" });
+  return c.render(<FormPage />, {
+    title: "Create event",
+    description:
+      "Create a photo-collection event in a minute — connect your own Google Drive or Dropbox and share one link. Guests upload straight to your cloud, no login.",
+  });
 });
 
-function FormPage({ error }: { error?: string }) {
+function FormPage({
+  error,
+  title = "",
+  email = "",
+  folder = "",
+}: {
+  error?: string;
+  title?: string;
+  email?: string;
+  folder?: string;
+}) {
   return (
     <section class="max-w-lg mx-auto px-6 py-20 md:py-28">
       <h1 class="font-heading text-4xl md:text-5xl font-light tracking-wide text-center">
         Create your event
       </h1>
-      <p class="text-taupe text-center mt-4">
+      <p class="text-charcoal-light text-center mt-4">
         Connect your storage. Photos go straight to you.
       </p>
 
@@ -67,9 +93,28 @@ function FormPage({ error }: { error?: string }) {
             name="title"
             required
             maxlength={100}
+            value={title}
             placeholder="Anna & Sam's Wedding"
             class="w-full border border-sand bg-parchment-light px-4 py-3 text-charcoal placeholder:text-shagreen focus:outline-none focus:ring-1 focus:ring-charcoal focus:border-charcoal"
           />
+        </div>
+
+        <div>
+          <label class="block text-xs uppercase tracking-widest text-charcoal-light mb-2">
+            Folder name <span class="normal-case text-shagreen">(optional)</span>
+          </label>
+          <input
+            type="text"
+            name="folder"
+            maxlength={100}
+            value={folder}
+            placeholder="Defaults to the event name"
+            class="w-full border border-sand bg-parchment-light px-4 py-3 text-charcoal placeholder:text-shagreen focus:outline-none focus:ring-1 focus:ring-charcoal focus:border-charcoal"
+          />
+          <p class="text-xs text-charcoal-light mt-2">
+            The folder we create in your cloud. We can only ever see this one
+            folder — never the rest of your drive.
+          </p>
         </div>
 
         <div>
@@ -79,6 +124,7 @@ function FormPage({ error }: { error?: string }) {
           <input
             type="email"
             name="email"
+            value={email}
             placeholder="you@example.com"
             class="w-full border border-sand bg-parchment-light px-4 py-3 text-charcoal placeholder:text-shagreen focus:outline-none focus:ring-1 focus:ring-charcoal focus:border-charcoal"
           />

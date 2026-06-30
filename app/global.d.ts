@@ -4,6 +4,8 @@ type Head = {
   title?: string;
   description?: string;
   image?: string;
+  noindex?: boolean;
+  jsonLd?: Record<string, unknown>;
 };
 
 declare module "hono" {
