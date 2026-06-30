@@ -23,33 +23,33 @@ export default createRoute(async (c) => {
   const photoId = c.req.param("photoId");
   if (!photoId) return placeholder();
 
-  // Edge cache: only GET responses for real thumbnails are stored. Wrapped so
-  // any Cache API hiccup can never blank a thumbnail — it just falls through to
-  // a fresh fetch. Keyed by the full request URL (id + size).
-  const cacheKey = new Request(new URL(c.req.url).toString(), {
-    method: "GET",
-  });
-  const cache = (caches as unknown as { default: Cache }).default;
+  // The whole body is guarded: a thumbnail endpoint must never surface an
+  // uncaught 500, because Cloudflare caches error responses at the edge —
+  // one transient D1/token failure under concurrent load would otherwise
+  // poison the cache for that URL. Worst case is always the placeholder.
   try {
+    // Edge cache: keyed by the full request URL (id + size + version). Only
+    // real, successful image responses are ever stored — never placeholders
+    // or errors.
+    const cacheKey = new Request(new URL(c.req.url).toString(), {
+      method: "GET",
+    });
+    const cache = (caches as unknown as { default: Cache }).default;
     const hit = await cache.match(cacheKey);
     if (hit) return hit;
-  } catch {
-    /* cache unavailable — serve fresh */
-  }
 
-  const photo = await getPhotoById(c.env.DB, photoId);
-  if (!photo) return placeholder();
+    const photo = await getPhotoById(c.env.DB, photoId);
+    if (!photo) return placeholder();
 
-  const event = await getEventByCode(c.env.DB, photo.event_id);
-  if (!event || !event.access_token) return placeholder();
+    const event = await getEventByCode(c.env.DB, photo.event_id);
+    if (!event || !event.access_token) return placeholder();
 
-  const size = c.req.query("size") === "full" ? "full" : "grid";
+    const size = c.req.query("size") === "full" ? "full" : "grid";
 
-  const isVideo = photo.mime_type.startsWith("video/");
-  if (isVideo && !photo.poster_ref) return placeholder();
-  const ref = isVideo ? photo.poster_ref! : photo.file_ref;
+    const isVideo = photo.mime_type.startsWith("video/");
+    if (isVideo && !photo.poster_ref) return placeholder();
+    const ref = isVideo ? photo.poster_ref! : photo.file_ref;
 
-  try {
     const accessToken = await ensureValidToken(c.env.DB, c.env, event);
     const provider = getProvider(event.provider);
     const res = await provider.getThumbnail(accessToken, ref, size);

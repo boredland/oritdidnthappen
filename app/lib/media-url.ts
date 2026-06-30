@@ -4,7 +4,7 @@
  * when a bad deploy poisons edge-cached responses: it changes every thumb URL,
  * abandoning the poisoned keys without needing a manual cache purge.
  */
-export const THUMB_CACHE_VERSION = 2;
+export const THUMB_CACHE_VERSION = 3;
 
 /** Thumbnail/poster URL for a photo id, carrying the cache version + size. */
 export function thumbUrl(id: string, size: "grid" | "full" = "grid"): string {
