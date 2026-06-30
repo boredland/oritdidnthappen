@@ -83,7 +83,7 @@ async function nativeSharePhoto(
   photoId: string,
   username: string,
 ): Promise<ShareResult> {
-  const path = `/api/thumb/${photoId}`;
+  const path = `/api/thumb/${photoId}?size=full`;
   if ("canShare" in navigator) {
     try {
       const res = await fetch(path);
@@ -731,7 +731,7 @@ function Lightbox({
         </button>
       )}
       <img
-        src={`/api/thumb/${photo.id}`}
+        src={`/api/thumb/${photo.id}?size=full`}
         alt={`Photo by ${photo.username}`}
         onClick={(e) => e.stopPropagation()}
         class="max-h-[85vh] max-w-full object-contain"

@@ -25,6 +25,8 @@ export interface UploadResult {
   fileRef: string;
 }
 
+export type ThumbSize = "grid" | "full";
+
 export interface StorageProvider {
   id: Provider;
   label: string;
@@ -39,8 +41,16 @@ export interface StorageProvider {
     mimeType: string,
     data: ArrayBuffer,
   ): Promise<UploadResult>;
-  /** Returns an image Response (thumbnail bytes) to stream to the client. */
-  getThumbnail(accessToken: string, fileRef: string): Promise<Response>;
+  /**
+   * Returns an image Response (thumbnail bytes) to stream to the client.
+   * `grid` is a small, cheap thumbnail for the gallery; `full` is high
+   * quality for the lightbox / cover / native share.
+   */
+  getThumbnail(
+    accessToken: string,
+    fileRef: string,
+    size: ThumbSize,
+  ): Promise<Response>;
   /** Best-effort delete of a previously uploaded file by its fileRef. */
   deleteFile(accessToken: string, fileRef: string): Promise<void>;
 }

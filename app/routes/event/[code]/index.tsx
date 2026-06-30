@@ -21,7 +21,7 @@ export default createRoute(async (c) => {
   }));
 
   const coverUrl = event.cover_photo_id
-    ? `/api/thumb/${event.cover_photo_id}`
+    ? `/api/thumb/${event.cover_photo_id}?size=full`
     : null;
 
   return c.render(

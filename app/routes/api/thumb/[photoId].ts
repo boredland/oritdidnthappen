@@ -28,10 +28,12 @@ export default createRoute(async (c) => {
   const event = await getEventByCode(c.env.DB, photo.event_id);
   if (!event || !event.access_token) return placeholder();
 
+  const size = c.req.query("size") === "full" ? "full" : "grid";
+
   try {
     const accessToken = await ensureValidToken(c.env.DB, c.env, event);
     const provider = getProvider(event.provider);
-    const res = await provider.getThumbnail(accessToken, photo.file_ref);
+    const res = await provider.getThumbnail(accessToken, photo.file_ref, size);
     if (!res.ok || !res.body) return placeholder();
 
     return new Response(res.body, {

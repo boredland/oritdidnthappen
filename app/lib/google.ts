@@ -2,6 +2,7 @@ import type { Bindings } from "../global";
 import type {
   FolderResult,
   StorageProvider,
+  ThumbSize,
   TokenSet,
   UploadResult,
 } from "./storage";
@@ -13,6 +14,9 @@ const DRIVE_FILES = "https://www.googleapis.com/drive/v3/files";
 const DRIVE_UPLOAD =
   "https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart";
 const SCOPE = "https://www.googleapis.com/auth/drive.file";
+
+// Rendered edge (px) for grid thumbnails; covers 2x DPR on the ~300px tiles.
+const GRID_THUMB_EDGE = 600;
 
 interface GoogleTokenResponse {
   access_token: string;
@@ -166,10 +170,38 @@ export const googleDrive: StorageProvider = {
     return { fileRef: json.id };
   },
 
-  async getThumbnail(accessToken: string, fileRef: string): Promise<Response> {
-    return fetch(`${DRIVE_FILES}/${fileRef}?alt=media`, {
+  async getThumbnail(
+    accessToken: string,
+    fileRef: string,
+    size: ThumbSize,
+  ): Promise<Response> {
+    const original = () =>
+      fetch(`${DRIVE_FILES}/${fileRef}?alt=media`, {
+        headers: { Authorization: `Bearer ${accessToken}` },
+      });
+
+    // Full size streams the original bytes. The grid uses Drive's pre-rendered
+    // `thumbnailLink` (a private lh3.googleusercontent.com URL ending in =sNNN),
+    // which is orders of magnitude smaller than the multi-MB original.
+    if (size === "full") return original();
+
+    const meta = await fetch(
+      `${DRIVE_FILES}/${fileRef}?fields=thumbnailLink`,
+      { headers: { Authorization: `Bearer ${accessToken}` } },
+    );
+    if (!meta.ok) return original();
+    const { thumbnailLink } = (await meta.json()) as {
+      thumbnailLink?: string;
+    };
+    if (!thumbnailLink) return original();
+
+    // Override Drive's default size directive (e.g. `=s220`, `=s220-c`,
+    // `=w220-h220`) so the grid renders at GRID_THUMB_EDGE.
+    const url = thumbnailLink.replace(/=[swh].*$/, `=s${GRID_THUMB_EDGE}`);
+    const thumb = await fetch(url, {
       headers: { Authorization: `Bearer ${accessToken}` },
     });
+    return thumb.ok ? thumb : original();
   },
 
   async deleteFile(accessToken: string, fileRef: string): Promise<void> {

@@ -2,6 +2,7 @@ import type { Bindings } from "../global";
 import type {
   FolderResult,
   StorageProvider,
+  ThumbSize,
   TokenSet,
   UploadResult,
 } from "./storage";
@@ -161,7 +162,11 @@ export const dropbox: StorageProvider = {
     return { fileRef: json.path_lower };
   },
 
-  async getThumbnail(accessToken: string, fileRef: string): Promise<Response> {
+  async getThumbnail(
+    accessToken: string,
+    fileRef: string,
+    size: ThumbSize,
+  ): Promise<Response> {
     return fetch(GET_THUMBNAIL, {
       method: "POST",
       headers: {
@@ -169,7 +174,7 @@ export const dropbox: StorageProvider = {
         "Dropbox-API-Arg": apiArg({
           resource: { ".tag": "path", path: fileRef },
           format: "jpeg",
-          size: "w640h480",
+          size: size === "full" ? "w2048h1536" : "w640h480",
           mode: "strict",
         }),
       },
