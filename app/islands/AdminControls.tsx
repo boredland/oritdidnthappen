@@ -68,7 +68,8 @@ export default function AdminControls({
           <button
             type="button"
             onClick={copy}
-            class="border-l border-sand px-5 text-xs uppercase tracking-widest hover:bg-charcoal hover:text-ivory transition-colors"
+            disabled={copied}
+            class="border-l border-sand px-5 text-xs uppercase tracking-widest hover:bg-charcoal hover:text-ivory transition-colors disabled:opacity-50"
           >
             {copied ? "Copied" : "Copy"}
           </button>
@@ -100,7 +101,7 @@ export default function AdminControls({
           disabled={busy}
           class="border border-charcoal px-6 py-3 text-xs uppercase tracking-widest hover:bg-charcoal hover:text-ivory transition-colors disabled:opacity-50"
         >
-          {isClosed ? "Reopen" : "Close event"}
+          {busy ? (isClosed ? "Reopening…" : "Closing…") : isClosed ? "Reopen" : "Close event"}
         </button>
       </div>
 

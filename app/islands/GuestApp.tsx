@@ -644,7 +644,7 @@ export default function GuestApp({ code, closed, initialPhotos }: Props) {
               }`}
             >
               <BellIcon filled={push === "on"} />
-              {push === "on" ? "Notifying" : "Notify me"}
+              {push === "working" ? "Updating…" : push === "on" ? "Notifying" : "Notify me"}
             </button>
           )}
           {photos.length > 1 && (
