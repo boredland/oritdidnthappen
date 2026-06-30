@@ -20,12 +20,23 @@ function placeholder(): Response {
 }
 
 export default createRoute(async (c) => {
-  const cache = (caches as any).default as Cache;
-  let response = await cache.match(c.req.raw);
-  if (response) return response;
-
   const photoId = c.req.param("photoId");
   if (!photoId) return placeholder();
+
+  // Edge cache: only GET responses for real thumbnails are stored. Wrapped so
+  // any Cache API hiccup can never blank a thumbnail — it just falls through to
+  // a fresh fetch. Keyed by the full request URL (id + size).
+  const cacheKey = new Request(new URL(c.req.url).toString(), {
+    method: "GET",
+  });
+  const cache = (caches as unknown as { default: Cache }).default;
+  try {
+    const hit = await cache.match(cacheKey);
+    if (hit) return hit;
+  } catch {
+    /* cache unavailable — serve fresh */
+  }
+
   const photo = await getPhotoById(c.env.DB, photoId);
   if (!photo) return placeholder();
 
@@ -51,15 +62,17 @@ export default createRoute(async (c) => {
       return placeholder();
     }
 
-    response = new Response(res.body, {
-      headers: {
-        "Content-Type": res.headers.get("Content-Type") ?? "image/jpeg",
-        "Cache-Control": "public, max-age=86400",
-      },
-    });
-
-    c.executionCtx.waitUntil(cache.put(c.req.raw, response.clone()));
-    return response;
+    // Buffer the bytes so the cached copy and the client copy are independent
+    // (no shared-stream race), then store and serve identical responses.
+    const bytes = await res.arrayBuffer();
+    const headers = {
+      "Content-Type": res.headers.get("Content-Type") ?? "image/jpeg",
+      "Cache-Control": "public, max-age=86400",
+    };
+    c.executionCtx.waitUntil(
+      cache.put(cacheKey, new Response(bytes, { headers })).catch(() => {}),
+    );
+    return new Response(bytes, { headers });
   } catch {
     return placeholder();
   }

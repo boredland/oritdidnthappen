@@ -6,10 +6,6 @@ import { ensureValidToken, getProvider } from "../../../lib/storage";
 // host's cloud, forwarding the client's Range header so the lightbox <video>
 // can seek. The body is piped, never buffered — memory-flat at any size.
 export default createRoute(async (c) => {
-  const cache = (caches as any).default as Cache;
-  let response = await cache.match(c.req.raw);
-  if (response) return response;
-
   const photoId = c.req.param("photoId");
   if (!photoId) return c.notFound();
 
@@ -46,13 +42,7 @@ export default createRoute(async (c) => {
     const contentLength = res.headers.get("Content-Length");
     if (contentLength) headers.set("Content-Length", contentLength);
 
-    response = new Response(res.body, { status: res.status, headers });
-
-    if (res.status === 200) {
-      c.executionCtx.waitUntil(cache.put(c.req.raw, response.clone()));
-    }
-
-    return response;
+    return new Response(res.body, { status: res.status, headers });
   } catch {
     return c.notFound();
   }
