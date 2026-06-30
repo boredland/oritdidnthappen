@@ -25,19 +25,24 @@ export default createRoute(async (c) => {
   return c.render(
     <section class="max-w-5xl mx-auto px-6 py-12 md:py-16">
       {coverUrl && (
-        <div class="mb-10 aspect-[16/9] overflow-hidden bg-parchment-dark">
+        <div class="relative mb-8 max-h-[44vh] aspect-[21/9] overflow-hidden bg-parchment-dark">
           <img
             src={coverUrl}
             alt={`${event.title} cover`}
-            class="h-full w-full object-cover"
+            class="h-full w-full object-cover object-center"
           />
+          <h1 class="absolute bottom-0 left-0 right-0 px-6 py-4 bg-charcoal/55 font-heading text-3xl md:text-5xl font-light tracking-wide text-ivory">
+            {event.title}
+          </h1>
         </div>
       )}
       <header class="text-center mb-10">
-        <h1 class="font-heading text-4xl md:text-5xl font-light tracking-wide">
-          {event.title}
-        </h1>
-        <p class="text-taupe mt-3">Add your photos to the collection.</p>
+        {!coverUrl && (
+          <h1 class="font-heading text-4xl md:text-5xl font-light tracking-wide">
+            {event.title}
+          </h1>
+        )}
+        <p class="text-charcoal-light mt-3">Add your photos to the collection.</p>
       </header>
 
       <GuestApp code={event.id} closed={closed} initialPhotos={initialPhotos} />

@@ -75,9 +75,9 @@ export default function AdminGallery({
 
   return (
     <div>
-      <div class="grid grid-cols-3 sm:grid-cols-4 gap-px bg-sand/40">
+      <div class="columns-3 sm:columns-4 gap-1 [&>*]:mb-1">
         {photos.map((p) => (
-          <div class="relative aspect-square bg-parchment-dark overflow-hidden group">
+          <div class="relative w-full aspect-square bg-parchment-dark overflow-hidden group">
             <img
               src={`/api/thumb/${p.id}`}
               alt={`Photo by ${p.username}`}
@@ -106,7 +106,7 @@ export default function AdminGallery({
                 type="button"
                 disabled={busy !== null}
                 onClick={() => remove(p.id)}
-                class="text-ivory text-xs uppercase tracking-widest border border-ivory/60 px-3 py-1.5 hover:bg-ivory hover:text-charcoal transition-colors disabled:opacity-50"
+                class="text-ivory text-xs uppercase tracking-widest border border-red-300/70 bg-red-900/30 px-3 py-1.5 hover:bg-red-200 hover:text-red-950 transition-colors disabled:opacity-50"
               >
                 Delete
               </button>

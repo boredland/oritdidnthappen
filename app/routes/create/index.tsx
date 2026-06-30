@@ -59,7 +59,7 @@ function FormPage({ error }: { error?: string }) {
 
       <form method="post" class="mt-12 space-y-8">
         <div>
-          <label class="block text-xs uppercase tracking-widest text-taupe mb-2">
+          <label class="block text-xs uppercase tracking-widest text-charcoal-light mb-2">
             Event name
           </label>
           <input
@@ -68,32 +68,32 @@ function FormPage({ error }: { error?: string }) {
             required
             maxlength={100}
             placeholder="Anna & Sam's Wedding"
-            class="w-full border border-sand bg-parchment-light px-4 py-3 text-charcoal placeholder:text-shagreen focus:outline-none focus:border-charcoal"
+            class="w-full border border-sand bg-parchment-light px-4 py-3 text-charcoal placeholder:text-shagreen focus:outline-none focus:ring-1 focus:ring-charcoal focus:border-charcoal"
           />
         </div>
 
         <div>
-          <label class="block text-xs uppercase tracking-widest text-taupe mb-2">
+          <label class="block text-xs uppercase tracking-widest text-charcoal-light mb-2">
             Email <span class="normal-case text-shagreen">(optional)</span>
           </label>
           <input
             type="email"
             name="email"
             placeholder="you@example.com"
-            class="w-full border border-sand bg-parchment-light px-4 py-3 text-charcoal placeholder:text-shagreen focus:outline-none focus:border-charcoal"
+            class="w-full border border-sand bg-parchment-light px-4 py-3 text-charcoal placeholder:text-shagreen focus:outline-none focus:ring-1 focus:ring-charcoal focus:border-charcoal"
           />
-          <p class="text-xs text-shagreen mt-2">
+          <p class="text-xs text-charcoal-light mt-2">
             We'll email you the admin link. Otherwise it's shown on the next
             screen.
           </p>
         </div>
 
         <div>
-          <label class="block text-xs uppercase tracking-widest text-taupe mb-3">
+          <label class="block text-xs uppercase tracking-widest text-charcoal-light mb-3">
             Storage
           </label>
           <div class="grid grid-cols-2 gap-4">
-            <label class="cursor-pointer border border-sand bg-parchment-light p-6 flex flex-col items-center gap-3 text-center has-[:checked]:border-charcoal has-[:checked]:bg-parchment-dark transition-colors">
+            <label class="cursor-pointer border border-sand bg-parchment-light p-6 flex flex-col items-center gap-3 text-center has-[:checked]:border-charcoal has-[:checked]:bg-parchment-dark has-[:focus-visible]:outline has-[:focus-visible]:outline-1 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-charcoal transition-colors">
               <input
                 type="radio"
                 name="provider"
@@ -104,16 +104,16 @@ function FormPage({ error }: { error?: string }) {
               <GoogleIcon />
               <span class="text-sm tracking-wide">Google Drive</span>
             </label>
-            <label class="cursor-pointer border border-sand bg-parchment-light p-6 flex flex-col items-center gap-3 text-center has-[:checked]:border-charcoal has-[:checked]:bg-parchment-dark transition-colors">
-              <input
-                type="radio"
-                name="provider"
-                value="dropbox"
-                class="sr-only"
-              />
+            <div
+              class="border border-sand/60 bg-parchment-light p-6 flex flex-col items-center gap-3 text-center opacity-50 cursor-not-allowed relative"
+              title="Dropbox support is coming soon"
+            >
               <DropboxIcon />
               <span class="text-sm tracking-wide">Dropbox</span>
-            </label>
+              <span class="absolute top-2 right-2 text-[10px] uppercase tracking-widest text-shagreen border border-sand px-1.5 py-0.5">
+                Soon
+              </span>
+            </div>
           </div>
         </div>
 

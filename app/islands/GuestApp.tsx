@@ -399,7 +399,7 @@ export default function GuestApp({ code, closed, initialPhotos }: Props) {
             setDragging(false);
             if (e.dataTransfer?.files) void handleFiles(e.dataTransfer.files);
           }}
-          class={`border border-dashed p-12 md:p-16 text-center cursor-pointer transition-colors ${
+          class={`max-w-2xl mx-auto border border-dashed py-10 md:py-12 px-6 text-center cursor-pointer transition-colors ${
             dragging
               ? "border-taupe border-solid bg-parchment-dark"
               : "border-sand bg-parchment-light hover:bg-parchment-dark"
@@ -426,8 +426,11 @@ export default function GuestApp({ code, closed, initialPhotos }: Props) {
       )}
 
       {closed && (
-        <div class="border border-sand bg-parchment-light p-8 text-center text-taupe">
-          This event is closed. Thank you for sharing.
+        <div class="max-w-2xl mx-auto border border-sand bg-parchment-light p-10 text-center">
+          <p class="font-heading text-2xl font-light tracking-wide text-charcoal">
+            This event is closed
+          </p>
+          <p class="text-charcoal-light mt-2 text-sm">Thank you for sharing.</p>
         </div>
       )}
 
@@ -446,9 +449,9 @@ export default function GuestApp({ code, closed, initialPhotos }: Props) {
                 </span>
               </div>
               {job.status !== "error" && (
-                <div class="mt-2 h-px bg-parchment-dark">
+                <div class="mt-2 h-0.5 bg-parchment-dark">
                   <div
-                    class="h-px bg-charcoal transition-all"
+                    class="h-0.5 bg-charcoal transition-all"
                     style={{ width: `${job.progress}%` }}
                   />
                 </div>
@@ -458,16 +461,16 @@ export default function GuestApp({ code, closed, initialPhotos }: Props) {
         </div>
       )}
 
-      <div class="mt-6 flex items-center justify-between text-sm">
-        <div class="flex items-center gap-4">
-          <span class="text-taupe">
+      <div class="mt-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between text-sm">
+        <div class="flex items-center gap-5">
+          <span class="text-charcoal-light">
             {photos.length} {photos.length === 1 ? "photo" : "photos"}
           </span>
           {photos.length > 0 && (
             <button
               type="button"
               onClick={onShareGallery}
-              class="inline-flex items-center gap-1.5 text-taupe hover:text-charcoal transition-colors"
+              class="inline-flex items-center gap-1.5 text-charcoal-light hover:text-charcoal transition-colors"
             >
               <ShareIcon /> Share
             </button>
@@ -480,7 +483,7 @@ export default function GuestApp({ code, closed, initialPhotos }: Props) {
               class={`inline-flex items-center gap-1.5 transition-colors disabled:opacity-50 ${
                 push === "on"
                   ? "text-charcoal"
-                  : "text-taupe hover:text-charcoal"
+                  : "text-charcoal-light hover:text-charcoal"
               }`}
             >
               <BellIcon filled={push === "on"} />
@@ -497,7 +500,7 @@ export default function GuestApp({ code, closed, initialPhotos }: Props) {
             onSave={async (name) => {
               const ok = await registerGuest(name);
               setEditingName(false);
-              if (!ok) alert("That name is taken or invalid.");
+              if (!ok) flashMsg("That name is taken or invalid.");
             }}
           />
         )}
@@ -505,21 +508,23 @@ export default function GuestApp({ code, closed, initialPhotos }: Props) {
 
       <div
         id="gallery-grid"
-        class="mt-4 grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-px bg-sand/40"
+        class="mt-4 columns-2 md:columns-3 lg:columns-4 gap-1 [&>*]:mb-1"
       >
         {photos.map((photo, i) => (
           <button
             type="button"
             onClick={() => setLightbox(i)}
-            class="group relative block aspect-square overflow-hidden bg-parchment-dark pd-fade-in"
+            class="group relative block w-full aspect-square overflow-hidden bg-parchment-dark pd-fade-in"
           >
             <img
               src={`/api/thumb/${photo.id}`}
               alt={`Photo by ${photo.username}`}
               loading="lazy"
+              width={300}
+              height={300}
               class="h-full w-full object-cover"
             />
-            <span class="absolute inset-x-0 bottom-0 bg-charcoal/70 text-ivory text-xs px-2 py-1 opacity-0 group-hover:opacity-100 transition-opacity text-left">
+            <span class="absolute inset-x-0 bottom-0 bg-charcoal/80 text-ivory text-xs px-2 py-1 opacity-0 group-hover:opacity-100 transition-opacity text-left drop-shadow-[0_1px_2px_rgba(0,0,0,0.5)]">
               {photo.username}
             </span>
           </button>

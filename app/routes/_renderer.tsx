@@ -43,8 +43,8 @@ export default jsxRenderer(({ children, title, description, image }) => {
               href="/"
               class="inline-flex items-center gap-3 text-charcoal"
             >
-              <img src="/logo.svg" alt="" width="28" height="28" />
-              <span class="font-heading text-2xl tracking-[0.3em] uppercase">
+              <img src="/logo.svg" alt="" width="28" height="28" class="shrink-0" />
+              <span class="font-heading text-xl md:text-2xl tracking-[0.15em] uppercase whitespace-nowrap">
                 or it didn't happen
               </span>
             </a>
@@ -52,7 +52,7 @@ export default jsxRenderer(({ children, title, description, image }) => {
         </header>
         <main class="flex-1">{children}</main>
         <footer class="border-t border-sand/40 mt-24">
-          <div class="max-w-5xl mx-auto px-6 py-12 text-center text-taupe text-sm tracking-wide">
+          <div class="max-w-5xl mx-auto px-6 py-12 text-center text-charcoal-light text-sm tracking-wide">
             <p>Photos go straight to the host's own cloud. We never store them.</p>
             <p class="mt-3 space-x-4">
               <a href="/privacy" class="hover:text-charcoal underline-offset-2 hover:underline">

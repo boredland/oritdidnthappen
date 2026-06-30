@@ -30,12 +30,10 @@ export default createRoute((c) => {
             height="72"
             class="mx-auto mb-10 opacity-90"
           />
-          <h1 class="font-heading font-light tracking-wide text-5xl md:text-7xl leading-[1.05]">
-            Share the moment.
-            <br />
-            Together.
+          <h1 class="font-heading font-light tracking-wide text-5xl md:text-7xl leading-[1.05] text-balance">
+            Share the moment. Together.
           </h1>
-          <p class="mt-8 text-lg text-taupe">
+          <p class="mt-8 text-lg text-charcoal-light">
             Your photos. Your cloud. One link.
           </p>
           <a
@@ -56,7 +54,7 @@ export default createRoute((c) => {
                 <h2 class="font-heading text-2xl font-medium tracking-wide mt-4">
                   {s.title}
                 </h2>
-                <p class="text-taupe mt-3 leading-relaxed">{s.body}</p>
+                <p class="text-charcoal-light mt-3 leading-relaxed">{s.body}</p>
               </div>
             </div>
           ))}
@@ -65,10 +63,8 @@ export default createRoute((c) => {
 
       <section class="border-t border-sand/40">
         <div class="max-w-2xl mx-auto px-6 py-24 md:py-32 text-center">
-          <h2 class="font-heading text-3xl md:text-4xl font-light tracking-wide leading-snug">
-            No accounts. No servers storing your photos.
-            <br />
-            Just the link.
+          <h2 class="font-heading text-3xl md:text-4xl font-light tracking-wide leading-snug text-balance">
+            No accounts. No servers storing your photos. Just the link.
           </h2>
           <a
             href="/create"
