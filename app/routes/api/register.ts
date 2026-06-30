@@ -1,16 +1,25 @@
 import { createRoute } from "honox/factory";
 import { generateId } from "../../lib/crypto";
-import {
-  createGuest,
-  getEventByCode,
-  isUsernameTaken,
-} from "../../lib/db";
+import { createGuest, getEventByCode, isUsernameTaken } from "../../lib/db";
+import { verifyTurnstile } from "../../lib/turnstile";
 import { sanitizeUsername, uniqueUsername } from "../../lib/username";
 
 export const POST = createRoute(async (c) => {
-  const body = await c.req.json<{ eventCode?: string; desiredUsername?: string }>();
+  const body = await c.req.json<{
+    eventCode?: string;
+    desiredUsername?: string;
+    turnstileToken?: string;
+  }>();
   const code = body.eventCode;
   if (!code) return c.json({ error: "Missing eventCode" }, 400);
+
+  const ip = c.req.header("CF-Connecting-IP") ?? null;
+  const ok = await verifyTurnstile(
+    body.turnstileToken,
+    ip,
+    c.env.TURNSTILE_SECRET_KEY,
+  );
+  if (!ok) return c.json({ error: "Verification failed" }, 403);
 
   const event = await getEventByCode(c.env.DB, code);
   if (!event) return c.json({ error: "Unknown event" }, 404);

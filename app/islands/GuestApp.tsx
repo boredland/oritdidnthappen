@@ -48,6 +48,7 @@ interface Props {
   initialPhotos: PhotoItem[];
   videosEnabled: boolean;
   videoMaxBytes: number | null;
+  turnstileSiteKey: string;
 }
 
 interface Session {
@@ -190,6 +191,7 @@ export default function GuestApp({
   initialPhotos,
   videosEnabled,
   videoMaxBytes,
+  turnstileSiteKey,
 }: Props) {
   const [session, setSession] = useState<Session | null>(null);
   const [sort, setSort] = useState<SortMode>("taken");
@@ -212,6 +214,7 @@ export default function GuestApp({
   const [initialIds] = useState(() => new Set(initialPhotos.map((p) => p.id)));
 
   const fileInput = useRef<HTMLInputElement | null>(null);
+  const cameraInput = useRef<HTMLInputElement | null>(null);
   // Polling keys off upload time (createdAt), independent of the display sort,
   // so new uploads are always caught regardless of their EXIF date.
   const sinceRef = useRef<number>(
@@ -243,10 +246,15 @@ export default function GuestApp({
 
   const registerGuest = useCallback(
     async (desiredUsername?: string) => {
+      const turnstileToken = await getToken();
       const res = await fetch("/api/register", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ eventCode: code, desiredUsername }),
+        body: JSON.stringify({
+          eventCode: code,
+          desiredUsername,
+          turnstileToken,
+        }),
       });
       if (!res.ok) return false;
       const data = (await res.json()) as Session;
@@ -365,11 +373,9 @@ export default function GuestApp({
           file: p.file,
           takenAt: p.takenAt,
         }));
-        const token = await getToken();
         const handle = await startBackgroundUpload(
           code,
           session.sessionToken,
-          token,
           bgFiles,
           (percent) => {
             for (const p of withMeta) patchJob(p.key, { progress: percent });
@@ -433,7 +439,6 @@ export default function GuestApp({
   // first frame in the lightbox).
   const uploadPoster = async (photoId: string, poster: Blob) => {
     try {
-      const token = await getToken();
       await fetch(`/api/upload/${code}`, {
         method: "POST",
         headers: {
@@ -441,7 +446,6 @@ export default function GuestApp({
           "Content-Type": "image/jpeg",
           "X-Filename": "poster.jpg",
           "X-Poster-For": photoId,
-          "X-Turnstile-Token": token,
         },
         body: poster,
       });
@@ -457,13 +461,11 @@ export default function GuestApp({
   ) => {
     const { promise, resolve } = Promise.withResolvers<void>();
     const xhr = new XMLHttpRequest();
-    const token = await getToken();
     xhr.open("POST", `/api/upload/${code}`);
     xhr.setRequestHeader("Authorization", `Bearer ${session!.sessionToken}`);
     xhr.setRequestHeader("Content-Type", file.type);
     xhr.setRequestHeader("X-Filename", encodeURIComponent(file.name));
     xhr.setRequestHeader("X-Taken-At", takenAt != null ? String(takenAt) : "");
-    xhr.setRequestHeader("X-Turnstile-Token", token);
 
     xhr.upload.onprogress = (e) => {
       if (e.lengthComputable) {
@@ -632,60 +634,120 @@ export default function GuestApp({
     if (document.fullscreenElement) document.exitFullscreen?.().catch(() => {});
   }, []);
 
+  // One invisible Turnstile widget, rendered lazily on first use. The api.js
+  // script loads async, so getToken() polls until it's ready before rendering
+  // and running the challenge (execution: "execute"); the resolver/id live in
+  // refs so they survive re-renders. Returns "" only when unconfigured (dev
+  // without a site key) or after a hard timeout, so a stuck challenge can't
+  // wedge registration forever.
   const turnstileRef = useRef<HTMLDivElement | null>(null);
-  let tokenResolve: ((token: string) => void) | null = null;
+  const widgetIdRef = useRef<string | null>(null);
+  const tokenResolveRef = useRef<((token: string) => void) | null>(null);
 
-  useEffect(() => {
-    if (!turnstileRef.current || !window.turnstile) return;
-    window.turnstile.render(turnstileRef.current, {
-      sitekey: "0x4AAAAAADtcV63FbQKtpG08",
-      action: "upload",
+  const ensureWidget = (): string | null => {
+    if (widgetIdRef.current) return widgetIdRef.current;
+    const ts = window.turnstile;
+    if (!turnstileSiteKey || !ts || !turnstileRef.current) return null;
+    widgetIdRef.current = ts.render(turnstileRef.current, {
+      sitekey: turnstileSiteKey,
+      action: "register",
       size: "invisible",
+      execution: "execute",
       callback: (token: string) => {
-        tokenResolve?.(token);
-        tokenResolve = null;
+        tokenResolveRef.current?.(token);
+        tokenResolveRef.current = null;
+      },
+      "error-callback": () => {
+        tokenResolveRef.current?.("");
+        tokenResolveRef.current = null;
       },
     });
-  }, [session]);
+    return widgetIdRef.current;
+  };
 
-  const getToken = () =>
-    new Promise<string>((resolve) => {
-      tokenResolve = resolve;
-      if (window.turnstile && turnstileRef.current) {
-        window.turnstile.execute(turnstileRef.current);
-      } else {
-        resolve("");
-      }
+  const getToken = (): Promise<string> => {
+    if (!turnstileSiteKey) return Promise.resolve("");
+    return new Promise<string>((resolve) => {
+      let settled = false;
+      const done = (t: string) => {
+        if (settled) return;
+        settled = true;
+        resolve(t);
+      };
+      tokenResolveRef.current = done;
+      let attempts = 0;
+      const run = () => {
+        if (settled) return;
+        const ts = window.turnstile;
+        const id = ensureWidget();
+        if (ts && id) {
+          ts.reset(id);
+          ts.execute(id);
+          return;
+        }
+        // Wait for the async api.js to load (≈9s budget).
+        if (++attempts > 60) {
+          done("");
+          return;
+        }
+        window.setTimeout(run, 150);
+      };
+      run();
+      window.setTimeout(() => done(""), 12000);
     });
+  };
 
   return (
     <div>
-      <div ref={turnstileRef} class="hidden" />
+      <div ref={turnstileRef} />
       {!closed && (
-        <div
-          id="upload-zone"
-          onClick={() => fileInput.current?.click()}
-          onDragOver={(e: DragEvent) => {
-            e.preventDefault();
-            setDragging(true);
-          }}
-          onDragLeave={() => setDragging(false)}
-          onDrop={(e: DragEvent) => {
-            e.preventDefault();
-            setDragging(false);
-            if (e.dataTransfer?.files) void handleFiles(e.dataTransfer.files);
-          }}
-          class={`max-w-2xl mx-auto border border-dashed py-10 md:py-12 px-6 text-center cursor-pointer transition-colors ${
-            dragging
-              ? "border-taupe border-solid bg-parchment-dark"
-              : "border-sand bg-parchment-light hover:bg-parchment-dark"
-          }`}
-        >
+        <div class="max-w-2xl mx-auto">
+          <div
+            id="upload-zone"
+            onClick={() => fileInput.current?.click()}
+            onDragOver={(e: DragEvent) => {
+              e.preventDefault();
+              setDragging(true);
+            }}
+            onDragLeave={() => setDragging(false)}
+            onDrop={(e: DragEvent) => {
+              e.preventDefault();
+              setDragging(false);
+              if (e.dataTransfer?.files) void handleFiles(e.dataTransfer.files);
+            }}
+            class={`border border-dashed py-10 md:py-12 px-6 text-center cursor-pointer transition-colors ${
+              dragging
+                ? "border-taupe border-solid bg-parchment-dark"
+                : "border-sand bg-parchment-light hover:bg-parchment-dark"
+            }`}
+          >
+            <input
+              ref={fileInput}
+              type="file"
+              accept={`image/jpeg,image/png,image/heic,image/heif,image/webp,.jpg,.jpeg,.png,.heic,.heif,.webp${videosEnabled ? ",video/mp4,video/quicktime,video/webm,.mp4,.mov,.webm" : ""}`}
+              multiple
+              class="hidden"
+              onChange={(e) => {
+                const t = e.target as HTMLInputElement;
+                if (t.files) void handleFiles(t.files);
+                t.value = "";
+              }}
+            />
+            <CameraIcon />
+            <p class="mt-4 text-charcoal tracking-wide">
+              Drop photos here or tap to select
+            </p>
+            <p class="mt-1 text-xs text-shagreen">
+              JPEG, PNG, HEIC, WebP · up to 25MB
+              {videosEnabled &&
+                ` · video up to ${videoMaxBytes ? Math.round(videoMaxBytes / (1024 * 1024)) : 25}MB`}
+            </p>
+          </div>
           <input
-            ref={fileInput}
+            ref={cameraInput}
             type="file"
-            accept={`image/jpeg,image/png,image/heic,image/heif,image/webp,.jpg,.jpeg,.png,.heic,.heif,.webp${videosEnabled ? ",video/mp4,video/quicktime,video/webm,.mp4,.mov,.webm" : ""}`}
-            multiple
+            accept="image/*"
+            capture="environment"
             class="hidden"
             onChange={(e) => {
               const t = e.target as HTMLInputElement;
@@ -693,15 +755,13 @@ export default function GuestApp({
               t.value = "";
             }}
           />
-          <CameraIcon />
-          <p class="mt-4 text-charcoal tracking-wide">
-            Drop photos here or tap to select
-          </p>
-          <p class="mt-1 text-xs text-shagreen">
-            JPEG, PNG, HEIC, WebP · up to 25MB
-            {videosEnabled &&
-              ` · video up to ${videoMaxBytes ? Math.round(videoMaxBytes / (1024 * 1024)) : 25}MB`}
-          </p>
+          <button
+            type="button"
+            onClick={() => cameraInput.current?.click()}
+            class="mt-3 flex w-full items-center justify-center gap-2 border border-charcoal bg-charcoal py-3 text-sm uppercase tracking-widest text-ivory transition-colors hover:bg-charcoal-light"
+          >
+            <CameraIcon size={18} class="text-ivory" /> Take a photo
+          </button>
         </div>
       )}
 
@@ -1207,14 +1267,20 @@ function Slideshow({
   );
 }
 
-function CameraIcon() {
+function CameraIcon({
+  size = 36,
+  class: cls = "mx-auto text-taupe",
+}: {
+  size?: number;
+  class?: string;
+}) {
   return (
     <svg
-      width="36"
-      height="36"
+      width={size}
+      height={size}
       viewBox="0 0 24 24"
       fill="none"
-      class="mx-auto text-taupe"
+      class={cls}
       aria-hidden="true"
     >
       <rect

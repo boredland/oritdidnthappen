@@ -1,6 +1,6 @@
 import { createRoute } from "honox/factory";
-import GuestApp, { type PhotoItem } from "../../../islands/GuestApp";
 import GalleryTracker from "../../../islands/GalleryTracker";
+import GuestApp, { type PhotoItem } from "../../../islands/GuestApp";
 import { getEventByCode, getPhotosByEvent } from "../../../lib/db";
 
 export default createRoute(async (c) => {
@@ -51,7 +51,9 @@ export default createRoute(async (c) => {
             {event.title}
           </h1>
         )}
-        <p class="text-charcoal-light mt-3">Add your photos to the collection.</p>
+        <p class="text-charcoal-light mt-3">
+          Add your photos to the collection.
+        </p>
       </header>
 
       <GuestApp
@@ -60,6 +62,7 @@ export default createRoute(async (c) => {
         initialPhotos={initialPhotos}
         videosEnabled={event.videos_enabled === 1}
         videoMaxBytes={event.video_max_bytes}
+        turnstileSiteKey={c.env.TURNSTILE_SITE_KEY ?? ""}
       />
     </section>,
     {

@@ -44,11 +44,16 @@ declare global {
       options: {
         sitekey: string;
         action?: string;
-        size?: "normal" | "compact" | "invisible";
+        size?: "normal" | "compact" | "invisible" | "flexible";
+        execution?: "render" | "execute";
         callback?: (token: string) => void;
+        "error-callback"?: () => void;
+        "expired-callback"?: () => void;
       },
-    ): void;
-    execute(container: HTMLElement): void;
+    ): string;
+    execute(container: HTMLElement | string): void;
+    reset(widgetId: HTMLElement | string): void;
+    remove(widgetId: HTMLElement | string): void;
   }
 
   interface Window {

@@ -28,7 +28,7 @@ export default function RecentGalleries() {
           >
             <h3 class="font-medium text-charcoal">{g.title}</h3>
             <p class="text-xs uppercase tracking-widest text-charcoal-light mt-2">
-              {g.role === "admin" ? "Admin View" : "Guest View"}
+              {g.role === "admin" ? "Admin View" : "Event Page"}
             </p>
           </a>
         ))}

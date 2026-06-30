@@ -32,7 +32,8 @@
         "useKeyWithClickEvents": "off",
         "noStaticElementInteractions": "off",
         "noSvgWithoutTitle": "off",
-        "useMediaCaption": "off"
+        "useMediaCaption": "off",
+        "useValidAriaRole": "off"
       },
       "correctness": {
         "noUnusedVariables": "warn"

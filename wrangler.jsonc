@@ -20,7 +20,7 @@
   "observability": {
     "enabled": true
   },
-  "smart_placement": {
+  "placement": {
     "mode": "smart"
   },
   "vars": {

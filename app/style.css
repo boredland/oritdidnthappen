@@ -154,3 +154,17 @@ label[class*="cursor-pointer"],
 [role="button"] {
   transition: transform 0.16s var(--ease-out);
 }
+
+/* Landing scroll cue: a gentle bounce hints there's content below the fold. */
+@keyframes pd-scroll-cue {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(5px);
+  }
+}
+.pd-scroll-cue {
+  animation: pd-scroll-cue 1.8s var(--ease-out) infinite;
+}

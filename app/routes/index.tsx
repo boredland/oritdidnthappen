@@ -1,6 +1,7 @@
 import { createRoute } from "honox/factory";
 
 import RecentGalleries from "../islands/RecentGalleries";
+
 const STEPS = [
   {
     n: "01",
@@ -70,11 +71,36 @@ export default createRoute((c) => {
           >
             Create your event
           </a>
+          <a
+            href="#how-it-works"
+            aria-label="See how it works"
+            class="pd-scroll-cue mt-16 mx-auto flex h-10 w-10 items-center justify-center text-charcoal-light hover:text-charcoal transition-colors"
+          >
+            <svg
+              width="24"
+              height="24"
+              viewBox="0 0 24 24"
+              fill="none"
+              aria-hidden="true"
+            >
+              <path
+                d="M6 9l6 6 6-6"
+                stroke="currentColor"
+                stroke-width="1.4"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              />
+            </svg>
+            <span class="sr-only">See how it works</span>
+          </a>
         </div>
       </section>
 
       <RecentGalleries />
-      <section class="max-w-5xl mx-auto px-6 py-24 md:py-32">
+      <section
+        id="how-it-works"
+        class="max-w-5xl mx-auto px-6 py-24 md:py-32 scroll-mt-8"
+      >
         <div class="grid md:grid-cols-3 gap-16 md:gap-12">
           {STEPS.map((s) => (
             <div>

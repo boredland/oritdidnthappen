@@ -40,26 +40,6 @@ function decodeFilename(raw: string | undefined, fallback: string): string {
 }
 
 export const POST = createRoute(async (c) => {
-  async function verifyTurnstile(
-    token: string,
-    ip: string,
-    env: typeof c.env,
-  ): Promise<boolean> {
-    const body = new URLSearchParams();
-    body.append("secret", env.TURNSTILE_SECRET_KEY);
-    body.append("response", token);
-    body.append("remoteip", ip);
-    const res = await fetch(
-      "https://challenges.cloudflare.com/turnstile/v0/siteverify",
-      {
-        method: "POST",
-        body,
-      },
-    );
-    const data = await res.json<{ success: boolean }>();
-    return data.success;
-  }
-
   const code = c.req.param("code");
   if (!code) return c.json({ error: "Missing code" }, 400);
   const auth = c.req.header("Authorization");
@@ -67,11 +47,6 @@ export const POST = createRoute(async (c) => {
   if (!sessionToken) return c.json({ error: "Missing session" }, 401);
 
   const event = await getEventByCode(c.env.DB, code);
-  const turnstileToken = c.req.header("X-Turnstile-Token");
-  const ip = c.req.header("CF-Connecting-IP") || "127.0.0.1";
-  if (!turnstileToken || !(await verifyTurnstile(turnstileToken, ip, c.env))) {
-    return c.json({ error: "Bot verification failed" }, 400);
-  }
   if (!event) return c.json({ error: "Unknown event" }, 404);
 
   const guest = await getGuestBySession(c.env.DB, event.id, sessionToken);

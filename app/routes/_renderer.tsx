@@ -27,7 +27,7 @@ export default jsxRenderer(
           {noindex ? <meta name="robots" content="noindex,nofollow" /> : null}
           <link rel="canonical" href={canonical} />
           <script
-            src="https://challenges.cloudflare.com/turnstile/v0/api.js"
+            src="https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit"
             async
             defer
           ></script>
@@ -74,7 +74,6 @@ export default jsxRenderer(
         </head>
         <body class="bg-parchment text-charcoal min-h-screen flex flex-col">
           <header class="border-b border-sand/40">
-            <div id="cf-turnstile" style="display: none;"></div>
             <div class="max-w-5xl mx-auto px-6 py-6">
               <a href="/" class="inline-flex items-center gap-3 text-charcoal">
                 <img

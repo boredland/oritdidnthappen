@@ -82,7 +82,8 @@ export default function AdminControls({
         maxBytes: number | null;
       };
       setVideosOn(data.enabled);
-      if (data.maxBytes != null) setMaxMb(Math.round(data.maxBytes / (1024 * 1024)));
+      if (data.maxBytes != null)
+        setMaxMb(Math.round(data.maxBytes / (1024 * 1024)));
     }
     setVideoBusy(false);
   };
@@ -112,7 +113,7 @@ export default function AdminControls({
           rel="noopener noreferrer"
           class="inline-block mt-3 text-sm underline underline-offset-2 text-charcoal hover:text-taupe"
         >
-          View guest page ↗
+          View event page ↗
         </a>
       </div>
 
@@ -133,7 +134,13 @@ export default function AdminControls({
           disabled={busy}
           class="border border-charcoal px-6 py-3 text-xs uppercase tracking-widest hover:bg-charcoal hover:text-ivory transition-colors disabled:opacity-50"
         >
-          {busy ? (isClosed ? "Reopening…" : "Closing…") : isClosed ? "Reopen" : "Close event"}
+          {busy
+            ? isClosed
+              ? "Reopening…"
+              : "Closing…"
+            : isClosed
+              ? "Reopen"
+              : "Close event"}
         </button>
       </div>
 
@@ -172,7 +179,9 @@ export default function AdminControls({
               value={maxMb}
               disabled={videoBusy}
               onChange={(e) => {
-                const v = Math.round(Number((e.target as HTMLInputElement).value));
+                const v = Math.round(
+                  Number((e.target as HTMLInputElement).value),
+                );
                 const clamped = Math.min(Math.max(1, v || 1), 90);
                 setMaxMb(clamped);
                 void saveVideoSettings(true, clamped);
