@@ -28,6 +28,7 @@ export default createRoute(async (c) => {
         username: p.username,
         createdAt: p.created_at,
         takenAt: p.taken_at,
+        kind: p.mime_type.startsWith("video/") ? "video" : "image",
       })),
     });
   }
@@ -49,6 +50,7 @@ export default createRoute(async (c) => {
       username: p.username,
       createdAt: p.created_at,
       takenAt: p.taken_at,
+      kind: p.mime_type.startsWith("video/") ? "video" : "image",
     })),
   });
 });

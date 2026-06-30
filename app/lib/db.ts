@@ -15,6 +15,8 @@ export interface EventRow {
   expires_at: number | null;
   cover_photo_id: string | null;
   folder_name: string | null;
+  videos_enabled: number;
+  video_max_bytes: number | null;
 }
 
 export interface GuestRow {
@@ -36,6 +38,7 @@ export interface PhotoRow {
   created_at: number;
   taken_at: number | null;
   content_hash: string | null;
+  poster_ref: string | null;
 }
 
 export interface PhotoWithUser extends PhotoRow {
@@ -135,6 +138,18 @@ export async function setEventExpiry(
     .run();
 }
 
+export async function setEventVideoSettings(
+  db: D1Database,
+  id: string,
+  enabled: boolean,
+  maxBytes: number | null,
+): Promise<void> {
+  await db
+    .prepare(`UPDATE events SET videos_enabled = ?, video_max_bytes = ? WHERE id = ?`)
+    .bind(enabled ? 1 : 0, maxBytes, id)
+    .run();
+}
+
 export async function isUsernameTaken(
   db: D1Database,
   eventId: string,
@@ -194,13 +209,14 @@ export async function addPhoto(
     size_bytes: number;
     taken_at: number | null;
     content_hash: string;
+    poster_ref: string | null;
   },
 ): Promise<number> {
   const row = await db
     .prepare(
       `INSERT INTO photos
-         (id, event_id, guest_id, file_ref, filename, mime_type, size_bytes, taken_at, content_hash)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+         (id, event_id, guest_id, file_ref, filename, mime_type, size_bytes, taken_at, content_hash, poster_ref)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
        RETURNING created_at`,
     )
     .bind(
@@ -213,6 +229,7 @@ export async function addPhoto(
       p.size_bytes,
       p.taken_at,
       p.content_hash,
+      p.poster_ref,
     )
     .first<{ created_at: number }>();
   return row?.created_at ?? Math.floor(Date.now() / 1000);
@@ -265,6 +282,19 @@ export async function setCoverPhoto(
   await db
     .prepare(`UPDATE events SET cover_photo_id = ? WHERE id = ?`)
     .bind(photoId, eventId)
+    .run();
+}
+
+/** Attach the client-generated poster's cloud file_ref to a video row. */
+export async function setPhotoPoster(
+  db: D1Database,
+  eventId: string,
+  photoId: string,
+  posterRef: string,
+): Promise<void> {
+  await db
+    .prepare(`UPDATE photos SET poster_ref = ? WHERE id = ? AND event_id = ?`)
+    .bind(posterRef, photoId, eventId)
     .run();
 }
 

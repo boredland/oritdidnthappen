@@ -80,6 +80,8 @@ export default createRoute(async (c) => {
         adminToken={event.admin_token}
         shareUrl={shareUrl}
         closed={closed}
+        videosEnabled={event.videos_enabled === 1}
+        videoMaxMb={event.video_max_bytes ? Math.round(event.video_max_bytes / (1024 * 1024)) : null}
       />
 
       {event.folder_url && (

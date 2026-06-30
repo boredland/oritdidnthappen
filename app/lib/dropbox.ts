@@ -2,6 +2,7 @@ import type { Bindings } from "../global";
 import type {
   FolderResult,
   StorageProvider,
+  StreamRequestInit,
   ThumbSize,
   TokenSet,
   UploadResult,
@@ -12,6 +13,7 @@ const AUTH_ENDPOINT = "https://www.dropbox.com/oauth2/authorize";
 const TOKEN_ENDPOINT = "https://api.dropboxapi.com/oauth2/token";
 const CREATE_FOLDER = "https://api.dropboxapi.com/2/files/create_folder_v2";
 const UPLOAD = "https://content.dropboxapi.com/2/files/upload";
+const DOWNLOAD = "https://content.dropboxapi.com/2/files/download";
 const GET_THUMBNAIL = "https://content.dropboxapi.com/2/files/get_thumbnail_v2";
 const DELETE_FILE = "https://api.dropboxapi.com/2/files/delete_v2";
 const SCOPE = "files.content.write files.content.read";
@@ -131,15 +133,17 @@ export const dropbox: StorageProvider = {
     };
   },
 
-  async uploadFile(
+  async streamUpload(
     accessToken: string,
     folderId: string,
     filename: string,
     _mimeType: string,
-    data: ArrayBuffer,
+    body: ReadableStream<Uint8Array>,
   ): Promise<UploadResult> {
+    // Single-request upload caps at 150 MB, well above our 90 MB ceiling, so
+    // the body streams straight through without the chunked-session dance.
     const path = `${folderId}/${filename}`;
-    const res = await fetch(UPLOAD, {
+    const init: StreamRequestInit = {
       method: "POST",
       headers: {
         Authorization: `Bearer ${accessToken}`,
@@ -151,8 +155,10 @@ export const dropbox: StorageProvider = {
           mute: true,
         }),
       },
-      body: data,
-    });
+      body,
+      duplex: "half",
+    };
+    const res = await fetch(UPLOAD, init);
     if (!res.ok) {
       throw new Error(
         `Dropbox upload failed: ${res.status} ${await res.text()}`,
@@ -160,6 +166,19 @@ export const dropbox: StorageProvider = {
     }
     const json = (await res.json()) as { path_lower: string };
     return { fileRef: json.path_lower };
+  },
+
+  async streamMedia(
+    accessToken: string,
+    fileRef: string,
+    range: string | null,
+  ): Promise<Response> {
+    const headers: Record<string, string> = {
+      Authorization: `Bearer ${accessToken}`,
+      "Dropbox-API-Arg": apiArg({ path: fileRef }),
+    };
+    if (range) headers.Range = range;
+    return fetch(DOWNLOAD, { method: "POST", headers });
   },
 
   async getThumbnail(

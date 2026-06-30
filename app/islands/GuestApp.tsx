@@ -1,18 +1,26 @@
 import { useCallback, useEffect, useRef, useState } from "hono/jsx";
 import { readTakenAt } from "../lib/exif";
 import { dampDrag, resolveSwipe } from "../lib/swipe";
-import { aggregateProgress, mapPool, UPLOAD_CONCURRENCY } from "../lib/upload";
+import {
+  aggregateProgress,
+  classifyFile,
+  mapPool,
+  UPLOAD_CONCURRENCY,
+  VIDEO_ACCEPTED,
+} from "../lib/upload";
 import {
   type BgUploadFile,
   startBackgroundUpload,
   supportsBackgroundUpload,
 } from "../lib/bgupload";
+import { generatePoster } from "../lib/poster";
 
 export interface PhotoItem {
   id: string;
   username: string;
   createdAt: number;
   takenAt: number | null;
+  kind: "image" | "video";
 }
 
 export type SortMode = "added" | "taken";
@@ -37,6 +45,8 @@ interface Props {
   code: string;
   closed: boolean;
   initialPhotos: PhotoItem[];
+  videosEnabled: boolean;
+  videoMaxBytes: number | null;
 }
 
 interface Session {
@@ -54,8 +64,6 @@ interface UploadJob {
   error?: string;
 }
 
-const ACCEPTED = ["image/jpeg", "image/png", "image/heic", "image/webp"];
-const MAX_BYTES = 25 * 1024 * 1024;
 const POLL_MS = 10_000;
 
 type ShareResult = "shared" | "copied" | "failed";
@@ -171,7 +179,13 @@ async function unsubscribeFromEvent(code: string): Promise<boolean> {
   return res.ok;
 }
 
-export default function GuestApp({ code, closed, initialPhotos }: Props) {
+export default function GuestApp({
+  code,
+  closed,
+  initialPhotos,
+  videosEnabled,
+  videoMaxBytes,
+}: Props) {
   const [session, setSession] = useState<Session | null>(null);
   const [sort, setSort] = useState<SortMode>("taken");
   const [photos, setPhotos] = useState<PhotoItem[]>(() =>
@@ -297,10 +311,9 @@ export default function GuestApp({ code, closed, initialPhotos }: Props) {
       const pending: { key: string; file: File }[] = [];
       list.forEach((file, i) => {
         const key = `${file.name}-${stamp}-${i}`;
-        if (!ACCEPTED.includes(file.type)) {
-          addJob({ key, name: file.name, size: file.size, progress: 0, status: "error", error: "Unsupported type" });
-        } else if (file.size > MAX_BYTES) {
-          addJob({ key, name: file.name, size: file.size, progress: 0, status: "error", error: "Too large (max 25MB)" });
+        const verdict = classifyFile(file, { videosEnabled, videoMaxBytes });
+        if (!verdict.ok) {
+          addJob({ key, name: file.name, size: file.size, progress: 0, status: "error", error: verdict.reason });
         } else {
           addJob({ key, name: file.name, size: file.size, progress: 0, status: "uploading" });
           pending.push({ key, file });
@@ -308,14 +321,25 @@ export default function GuestApp({ code, closed, initialPhotos }: Props) {
       });
       if (pending.length === 0) return;
 
-      // EXIF capture time, read client-side before upload (null when absent).
+      // Read EXIF capture time and, for videos, draw a poster — both before
+      // upload. readTakenAt is null for non-JPEGs, generatePoster null for
+      // non-videos (and on any failure), so a video just carries both.
       const withMeta = await Promise.all(
-        pending.map(async (p) => ({ ...p, takenAt: await readTakenAt(p.file) })),
+        pending.map(async (p) => {
+          const isVid = VIDEO_ACCEPTED.includes(p.file.type);
+          const [takenAt, poster] = await Promise.all([
+            readTakenAt(p.file),
+            isVid ? generatePoster(p.file) : Promise.resolve<Blob | null>(null),
+          ]);
+          return { ...p, takenAt, poster };
+        }),
       );
 
-      // Background Fetch path: keeps uploading even if the PWA is closed
-      // (Chromium/Android). Falls through to the in-page pool otherwise.
-      if (supportsBackgroundUpload()) {
+      // Background Fetch keeps uploading even if the PWA is closed
+      // (Chromium/Android), but the SW can't thread a video's row id into a
+      // follow-up poster request — so any batch with a video stays in-page.
+      const hasVideo = withMeta.some((p) => VIDEO_ACCEPTED.includes(p.file.type));
+      if (supportsBackgroundUpload() && !hasVideo) {
         const bgFiles: BgUploadFile[] = withMeta.map((p) => ({
           file: p.file,
           takenAt: p.takenAt,
@@ -340,10 +364,10 @@ export default function GuestApp({ code, closed, initialPhotos }: Props) {
       }
 
       await mapPool(withMeta, UPLOAD_CONCURRENCY, async (p) => {
-        await uploadOne(p.file, p.key, p.takenAt);
+        await uploadOne(p.file, p.key, p.takenAt, p.poster);
       });
     },
-    [session, closed, code],
+    [session, closed, code, videosEnabled, videoMaxBytes],
   );
 
   // Finalize a background batch when the service worker reports it done/failed
@@ -375,14 +399,38 @@ export default function GuestApp({ code, closed, initialPhotos }: Props) {
   const addJob = (job: UploadJob) => setJobs((prev) => [job, ...prev]);
   const patchJob = (key: string, patch: Partial<UploadJob>) =>
     setJobs((prev) => prev.map((j) => (j.key === key ? { ...j, ...patch } : j)));
-  const uploadOne = (file: File, key: string, takenAt: number | null) => {
+  // Best-effort poster attach for a video that just uploaded. Errors are
+  // swallowed — a posterless video still shows (placeholder tile, native
+  // first frame in the lightbox).
+  const uploadPoster = async (photoId: string, poster: Blob) => {
+    try {
+      await fetch(`/api/upload/${code}`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${session!.sessionToken}`,
+          "Content-Type": "image/jpeg",
+          "X-Filename": "poster.jpg",
+          "X-Poster-For": photoId,
+        },
+        body: poster,
+      });
+    } catch {
+      /* cosmetic — ignore */
+    }
+  };
+  const uploadOne = (
+    file: File,
+    key: string,
+    takenAt: number | null,
+    poster: Blob | null,
+  ) => {
     const { promise, resolve } = Promise.withResolvers<void>();
-    const form = new FormData();
-    form.append("file", file);
-    form.append("takenAt", takenAt != null ? String(takenAt) : "");
     const xhr = new XMLHttpRequest();
     xhr.open("POST", `/api/upload/${code}`);
     xhr.setRequestHeader("Authorization", `Bearer ${session!.sessionToken}`);
+    xhr.setRequestHeader("Content-Type", file.type);
+    xhr.setRequestHeader("X-Filename", encodeURIComponent(file.name));
+    xhr.setRequestHeader("X-Taken-At", takenAt != null ? String(takenAt) : "");
 
     xhr.upload.onprogress = (e) => {
       if (e.lengthComputable) {
@@ -392,11 +440,9 @@ export default function GuestApp({ code, closed, initialPhotos }: Props) {
     xhr.onload = () => {
       if (xhr.status >= 200 && xhr.status < 300) {
         try {
-          const data = JSON.parse(xhr.responseText) as {
-            uploaded: PhotoItem[];
-          };
-          if (data.uploaded?.length) {
-            const p = data.uploaded[0];
+          const data = JSON.parse(xhr.responseText) as { photo?: PhotoItem };
+          const p = data.photo;
+          if (p) {
             setPhotos((prev) =>
               prev.some((x) => x.id === p.id)
                 ? prev
@@ -404,6 +450,7 @@ export default function GuestApp({ code, closed, initialPhotos }: Props) {
             );
             if (p.createdAt > (sinceRef.current ?? 0))
               sinceRef.current = p.createdAt;
+            if (p.kind === "video" && poster) void uploadPoster(p.id, poster);
           }
           patchJob(key, { progress: 100, status: "done" });
         } catch {
@@ -418,7 +465,7 @@ export default function GuestApp({ code, closed, initialPhotos }: Props) {
       patchJob(key, { status: "error", error: "Network error" });
       resolve();
     };
-    xhr.send(form);
+    xhr.send(file);
     return promise;
   };
 
@@ -466,11 +513,23 @@ export default function GuestApp({ code, closed, initialPhotos }: Props) {
     else if (r === "failed") flashMsg("Couldn't share");
   }, [code]);
 
-  const onSharePhoto = useCallback(async (photo: PhotoItem) => {
-    const r = await nativeSharePhoto(photo.id, photo.username);
-    if (r === "copied") flashMsg("Link copied");
-    else if (r === "failed") flashMsg("Couldn't share");
-  }, []);
+  const onSharePhoto = useCallback(
+    async (photo: PhotoItem) => {
+      // Sharing a video means fetching its (≤90 MB) bytes — wrong on mobile.
+      // Share a link to the gallery instead; only images share as a file.
+      const r =
+        photo.kind === "video"
+          ? await nativeShareUrl(
+              `${location.origin}/event/${code}`,
+              "or it didn't happen",
+              `Video by ${photo.username}`,
+            )
+          : await nativeSharePhoto(photo.id, photo.username);
+      if (r === "copied") flashMsg("Link copied");
+      else if (r === "failed") flashMsg("Couldn't share");
+    },
+    [code],
+  );
 
   // Detect push support + whether this browser is already subscribed.
   useEffect(() => {
@@ -551,7 +610,7 @@ export default function GuestApp({ code, closed, initialPhotos }: Props) {
           <input
             ref={fileInput}
             type="file"
-            accept="image/jpeg,image/png,image/heic,image/heif,image/webp,.jpg,.jpeg,.png,.heic,.heif,.webp"
+            accept={`image/jpeg,image/png,image/heic,image/heif,image/webp,.jpg,.jpeg,.png,.heic,.heif,.webp${videosEnabled ? ",video/mp4,video/quicktime,video/webm,.mp4,.mov,.webm" : ""}`}
             multiple
             class="hidden"
             onChange={(e) => {
@@ -564,7 +623,11 @@ export default function GuestApp({ code, closed, initialPhotos }: Props) {
           <p class="mt-4 text-charcoal tracking-wide">
             Drop photos here or tap to select
           </p>
-          <p class="mt-1 text-xs text-shagreen">JPEG, PNG, HEIC, WebP · up to 25MB</p>
+          <p class="mt-1 text-xs text-shagreen">
+            JPEG, PNG, HEIC, WebP · up to 25MB
+            {videosEnabled &&
+              ` · video up to ${videoMaxBytes ? Math.round(videoMaxBytes / (1024 * 1024)) : 25}MB`}
+          </p>
         </div>
       )}
 
@@ -694,6 +757,15 @@ export default function GuestApp({ code, closed, initialPhotos }: Props) {
               height={300}
               class="h-full w-full object-cover"
             />
+            {photo.kind === "video" && (
+              <span class="pointer-events-none absolute inset-0 flex items-center justify-center">
+                <span class="flex h-12 w-12 items-center justify-center rounded-full bg-charcoal/55 text-ivory">
+                  <svg viewBox="0 0 24 24" fill="currentColor" class="h-5 w-5 translate-x-0.5">
+                    <path d="M8 5v14l11-7z" />
+                  </svg>
+                </span>
+              </span>
+            )}
             <span class="absolute inset-x-0 bottom-0 bg-charcoal/80 text-ivory text-xs px-2 py-1 opacity-0 group-hover:opacity-100 transition-opacity text-left drop-shadow-[0_1px_2px_rgba(0,0,0,0.5)]">
               {photo.username}
             </span>
@@ -866,12 +938,24 @@ function Lightbox({
         </button>
       )}
       <div ref={dragRef} class="will-change-transform">
-        <img
-          src={`/api/thumb/${photo.id}?size=full`}
-          alt={`Photo by ${photo.username}`}
-          onClick={(e) => e.stopPropagation()}
-          class="lightbox-img-in max-h-[85vh] max-w-full object-contain"
-        />
+        {photo.kind === "video" ? (
+          <video
+            controls
+            playsInline
+            preload="metadata"
+            poster={`/api/thumb/${photo.id}?size=full`}
+            src={`/api/media/${photo.id}`}
+            onClick={(e) => e.stopPropagation()}
+            class="lightbox-img-in max-h-[85vh] max-w-full object-contain"
+          />
+        ) : (
+          <img
+            src={`/api/thumb/${photo.id}?size=full`}
+            alt={`Photo by ${photo.username}`}
+            onClick={(e) => e.stopPropagation()}
+            class="lightbox-img-in max-h-[85vh] max-w-full object-contain"
+          />
+        )}
       </div>
       <p class="mt-4 text-ivory/70 text-sm tracking-wide">{photo.username}</p>
       {hasNext && (

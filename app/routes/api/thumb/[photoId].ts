@@ -30,10 +30,17 @@ export default createRoute(async (c) => {
 
   const size = c.req.query("size") === "full" ? "full" : "grid";
 
+  // A video's own file_ref must never reach getThumbnail (Dropbox errors;
+  // Drive would stream the whole video). Thumbnail the client-made poster
+  // instead, and fall back to the placeholder when there isn't one.
+  const isVideo = photo.mime_type.startsWith("video/");
+  if (isVideo && !photo.poster_ref) return placeholder();
+  const ref = isVideo ? photo.poster_ref! : photo.file_ref;
+
   try {
     const accessToken = await ensureValidToken(c.env.DB, c.env, event);
     const provider = getProvider(event.provider);
-    const res = await provider.getThumbnail(accessToken, photo.file_ref, size);
+    const res = await provider.getThumbnail(accessToken, ref, size);
     if (!res.ok || !res.body) {
       // The file is gone from the host's cloud — silently self-heal the DB
       // so the gallery stops serving a broken thumbnail, then fall back to

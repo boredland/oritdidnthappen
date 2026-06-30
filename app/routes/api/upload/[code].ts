@@ -1,26 +1,38 @@
 import { createRoute } from "honox/factory";
-import { addPhoto, getEventByCode, getGuestBySession, getPhotoByHash } from "../../../lib/db";
+import {
+  addPhoto,
+  getEventByCode,
+  getGuestBySession,
+  getPhotoByHash,
+  getPhotoById,
+  setPhotoPoster,
+} from "../../../lib/db";
 import { generateId } from "../../../lib/crypto";
 import { ensureValidToken, getProvider } from "../../../lib/storage";
+import {
+  IMAGE_ACCEPTED,
+  IMAGE_MAX_BYTES,
+  VIDEO_ACCEPTED,
+  VIDEO_CEILING_BYTES,
+} from "../../../lib/upload";
 import { notifyNewPhotos } from "../../../lib/notify";
 
-const ACCEPTED: Record<string, true> = {
-  "image/jpeg": true,
-  "image/png": true,
-  "image/heic": true,
-  "image/webp": true,
-};
-const MAX_BYTES = 25 * 1024 * 1024;
-
-interface Uploaded {
+type FileKind = "image" | "video";
+interface Item {
   id: string;
   username: string;
   createdAt: number;
   takenAt: number | null;
+  kind: FileKind;
 }
-interface UploadError {
-  filename: string;
-  reason: string;
+
+function decodeFilename(raw: string | undefined, fallback: string): string {
+  if (!raw) return fallback;
+  try {
+    return decodeURIComponent(raw);
+  } catch {
+    return raw;
+  }
 }
 
 export const POST = createRoute(async (c) => {
@@ -43,95 +55,126 @@ export const POST = createRoute(async (c) => {
   if (!event.folder_id) {
     return c.json({ error: "Storage not connected" }, 409);
   }
-  const form = await c.req.parseBody({ all: true });
-  const rawFiles = (() => {
-    const v = form["file"];
-    return Array.isArray(v) ? v : [v];
-  })();
-  // Optional EXIF capture time per file, sent by the client positionally
-  // aligned with the file fields (empty string when the photo had no EXIF).
-  const rawTaken = form["takenAt"];
-  const takenList = Array.isArray(rawTaken) ? rawTaken : [rawTaken];
-  // Keep files paired with their takenAt by zipping at the raw position,
-  // before any filtering shifts indices.
-  const entries = rawFiles.flatMap((f, i) =>
-    f instanceof File ? [{ file: f, takenAt: takenList[i] }] : [],
-  );
-  if (entries.length === 0) return c.json({ error: "No files" }, 400);
 
+  const mime = c.req.header("Content-Type") ?? "";
+  const contentLength = Number(c.req.header("Content-Length")) || 0;
+  const isImage = IMAGE_ACCEPTED.includes(mime);
+  const isVideo = VIDEO_ACCEPTED.includes(mime);
+
+  // Type gate. Images always pass; videos only when the host enabled them.
+  if (!isImage && !isVideo) {
+    return c.json({ error: "Unsupported type" }, 415);
+  }
+  if (isVideo && event.videos_enabled !== 1) {
+    return c.json({ error: "Videos not allowed" }, 415);
+  }
+
+  // Size gate from the declared length (the stream is also bounded by the
+  // 100 MB Workers request-body limit; this rejects early with a clear error).
+  const sizeLimit = isVideo
+    ? (event.video_max_bytes ?? VIDEO_CEILING_BYTES)
+    : IMAGE_MAX_BYTES;
+  if (contentLength > sizeLimit) {
+    return c.json({ error: "Too large" }, 413);
+  }
 
   const provider = getProvider(event.provider);
   const accessToken = await ensureValidToken(c.env.DB, c.env, event);
 
-  const uploaded: Uploaded[] = [];
-  const errors: UploadError[] = [];
-  for (const { file, takenAt: takenField } of entries) {
-    if (!ACCEPTED[file.type]) {
-      errors.push({ filename: file.name, reason: "Unsupported type" });
-      continue;
-    }
-    if (file.size > MAX_BYTES) {
-      errors.push({ filename: file.name, reason: "Too large" });
-      continue;
-    }
-    try {
-      const buffer = await file.arrayBuffer();
+  const body = c.req.raw.body as ReadableStream<Uint8Array> | null;
+  if (!body) return c.json({ error: "Empty body" }, 400);
 
-      // Dedup: hash the bytes and check if this exact file is already in the
-      // gallery. Bypasses the cloud upload entirely when it is — saves quota,
-      // bandwidth, and a duplicate row (the unique index is the backstop).
-      const hashBuffer = await crypto.subtle.digest("SHA-256", buffer);
-      const hashHex = Array.from(new Uint8Array(hashBuffer))
-        .map((b) => b.toString(16).padStart(2, "0"))
-        .join("");
+  // Poster-attach branch: the client-generated JPEG poster for a video already
+  // in the gallery. No dedup, no row, no notify — just upload and link it.
+  const posterFor = c.req.header("X-Poster-For");
+  if (posterFor) {
+    const target = await getPhotoById(c.env.DB, posterFor);
+    if (!target || target.event_id !== event.id) {
+      return c.json({ error: "Unknown photo" }, 404);
+    }
+    if (!target.mime_type.startsWith("video/")) {
+      return c.json({ error: "Not a video" }, 400);
+    }
+    const { fileRef } = await provider.streamUpload(
+      accessToken,
+      event.folder_id,
+      `poster-${posterFor}.jpg`,
+      "image/jpeg",
+      body,
+    );
+    await setPhotoPoster(c.env.DB, event.id, posterFor, fileRef);
+    return c.json({ ok: true });
+  }
 
-      const existing = await getPhotoByHash(c.env.DB, event.id, hashHex);
-      if (existing) {
-        uploaded.push({
+  const filename = decodeFilename(c.req.header("X-Filename"), "upload");
+  const takenRaw = Number(c.req.header("X-Taken-At"));
+  const takenAt =
+    Number.isFinite(takenRaw) && takenRaw > 0 ? Math.floor(takenRaw) : null;
+  const kind: FileKind = isVideo ? "video" : "image";
+
+  try {
+    // Stream the body to the provider and hash it in lockstep: one tee branch
+    // feeds the streaming hash sink, the other the upload. Neither buffers the
+    // file in the isolate — memory stays flat regardless of size.
+    const [toHash, toUpload] = body.tee();
+    const ds = new DigestStream("SHA-256");
+    const hashP = toHash.pipeTo(ds).then(() => ds.digest);
+    const uploadP = provider.streamUpload(
+      accessToken,
+      event.folder_id,
+      filename,
+      mime,
+      toUpload,
+    );
+    const [{ fileRef }, digest] = await Promise.all([uploadP, hashP]);
+    const hashHex = Array.from(new Uint8Array(digest))
+      .map((b) => b.toString(16).padStart(2, "0"))
+      .join("");
+
+    // Dedup: a streamed upload commits the bytes before the hash is known, so
+    // a duplicate is caught after upload — delete the redundant cloud copy
+    // (best effort) and return the row that already holds these bytes.
+    const existing = await getPhotoByHash(c.env.DB, event.id, hashHex);
+    if (existing) {
+      try {
+        await provider.deleteFile(accessToken, fileRef);
+      } catch {
+        /* orphan cloud file; autorename already avoided a name clash */
+      }
+      return c.json({
+        photo: {
           id: existing.id,
           username: guest.username,
           createdAt: existing.created_at,
           takenAt: existing.taken_at,
-        });
-        continue;
-      }
-
-      const result = await provider.uploadFile(
-        accessToken,
-        event.folder_id,
-        file.name,
-        file.type,
-        buffer,
-      );
-      const id = generateId(16);
-      const takenRaw = Number(takenField);
-      const takenAt =
-        Number.isFinite(takenRaw) && takenRaw > 0 ? Math.floor(takenRaw) : null;
-      const createdAt = await addPhoto(c.env.DB, {
-        id,
-        event_id: event.id,
-        guest_id: guest.id,
-        file_ref: result.fileRef,
-        filename: file.name,
-        mime_type: file.type,
-        size_bytes: file.size,
-        taken_at: takenAt,
-        content_hash: hashHex,
-      });
-      uploaded.push({ id, username: guest.username, createdAt, takenAt });
-    } catch (e) {
-      errors.push({
-        filename: file.name,
-        reason: e instanceof Error ? e.message : "Upload failed",
+          kind: existing.mime_type.startsWith("video/") ? "video" : "image",
+        } satisfies Item,
       });
     }
-  }
 
-  if (uploaded.length > 0) {
+    const id = generateId(16);
+    const createdAt = await addPhoto(c.env.DB, {
+      id,
+      event_id: event.id,
+      guest_id: guest.id,
+      file_ref: fileRef,
+      filename,
+      mime_type: mime,
+      size_bytes: Number(ds.bytesWritten),
+      taken_at: takenAt,
+      content_hash: hashHex,
+      poster_ref: null,
+    });
     c.executionCtx.waitUntil(
-      notifyNewPhotos(c.env, event, uploaded.length, guest.username),
+      notifyNewPhotos(c.env, event, 1, guest.username),
+    );
+    return c.json({
+      photo: { id, username: guest.username, createdAt, takenAt, kind } satisfies Item,
+    });
+  } catch (e) {
+    return c.json(
+      { error: e instanceof Error ? e.message : "Upload failed" },
+      500,
     );
   }
-
-  return c.json({ uploaded, errors });
 });

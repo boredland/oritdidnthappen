@@ -64,10 +64,11 @@ export interface BgUploadHandle {
 }
 
 /**
- * Build one POST Request per file (matching the in-page upload contract:
- * `file` + `takenAt` multipart fields, Bearer auth) and register them as a
- * single Background Fetch. Returns null if unsupported or registration fails,
- * so the caller can fall back without a throw.
+ * Build one POST Request per file (matching the in-page upload contract: the
+ * raw file as the body, metadata in X-Filename / X-Taken-At headers, Bearer
+ * auth) and register them as a single Background Fetch. Returns null if
+ * unsupported or registration fails, so the caller can fall back without a
+ * throw.
  *
  * `onProgress` receives byte-weighted 0–100 for the whole batch while the page
  * is still open; once the page closes the service worker takes over silently.
@@ -81,13 +82,15 @@ export async function startBackgroundUpload(
   if (!supportsBackgroundUpload() || files.length === 0) return null;
 
   const requests = files.map(({ file, takenAt }) => {
-    const form = new FormData();
-    form.append("file", file);
-    form.append("takenAt", takenAt != null ? String(takenAt) : "");
     return new Request(`/api/upload/${code}`, {
       method: "POST",
-      headers: { Authorization: `Bearer ${sessionToken}` },
-      body: form,
+      headers: {
+        Authorization: `Bearer ${sessionToken}`,
+        "Content-Type": file.type,
+        "X-Filename": encodeURIComponent(file.name),
+        "X-Taken-At": takenAt != null ? String(takenAt) : "",
+      },
+      body: file,
     });
   });
 

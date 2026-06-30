@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { aggregateProgress, mapPool, type ProgressJob } from "./upload";
+import {
+  aggregateProgress,
+  classifyFile,
+  mapPool,
+  type ProgressJob,
+} from "./upload";
 
 describe("mapPool", () => {
   it("runs at most `limit` tasks concurrently", async () => {
@@ -155,5 +160,69 @@ describe("aggregateProgress", () => {
     ]);
     // 1 + 0.5 = 1.5 → floor → 1 (error contributes nothing)
     expect(agg.uploadedCount).toBe(1);
+  });
+});
+
+describe("classifyFile", () => {
+  const f = (type: string, size: number) => ({ type, size });
+  const off = { videosEnabled: false, videoMaxBytes: null };
+  const on = { videosEnabled: true, videoMaxBytes: 30 * 1024 * 1024 };
+
+  it("accepts an image regardless of video settings", () => {
+    expect(classifyFile(f("image/jpeg", 1024), off)).toEqual({
+      ok: true,
+      kind: "image",
+    });
+    expect(classifyFile(f("image/png", 1024), on)).toEqual({
+      ok: true,
+      kind: "image",
+    });
+  });
+
+  it("rejects an oversized image", () => {
+    const res = classifyFile(f("image/jpeg", 26 * 1024 * 1024), on);
+    expect(res).toEqual({ ok: false, reason: "Too large (max 25MB)" });
+  });
+
+  it("blocks any video when videos are disabled", () => {
+    expect(classifyFile(f("video/mp4", 1024), off)).toEqual({
+      ok: false,
+      reason: "Video not allowed",
+    });
+  });
+
+  it("rejects an unsupported video type even when videos are enabled", () => {
+    expect(classifyFile(f("video/x-matroska", 1024), on)).toEqual({
+      ok: false,
+      reason: "Unsupported type",
+    });
+  });
+
+  it("rejects a video over the per-event limit", () => {
+    expect(classifyFile(f("video/mp4", 31 * 1024 * 1024), on)).toEqual({
+      ok: false,
+      reason: "Too large",
+    });
+  });
+
+  it("accepts an in-limit video of each allowed type when enabled", () => {
+    for (const type of ["video/mp4", "video/quicktime", "video/webm"]) {
+      expect(classifyFile(f(type, 10 * 1024 * 1024), on)).toEqual({
+        ok: true,
+        kind: "video",
+      });
+    }
+  });
+
+  it("falls back to the 90MB ceiling when no per-event limit is set", () => {
+    const enabledNoLimit = { videosEnabled: true, videoMaxBytes: null };
+    expect(classifyFile(f("video/mp4", 80 * 1024 * 1024), enabledNoLimit)).toEqual({
+      ok: true,
+      kind: "video",
+    });
+    expect(classifyFile(f("video/mp4", 91 * 1024 * 1024), enabledNoLimit)).toEqual({
+      ok: false,
+      reason: "Too large",
+    });
   });
 });

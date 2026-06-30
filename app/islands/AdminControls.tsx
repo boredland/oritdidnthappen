@@ -5,6 +5,8 @@ interface Props {
   adminToken: string;
   shareUrl: string;
   closed: boolean;
+  videosEnabled: boolean;
+  videoMaxMb: number | null;
 }
 
 export default function AdminControls({
@@ -12,12 +14,17 @@ export default function AdminControls({
   adminToken,
   shareUrl,
   closed,
+  videosEnabled,
+  videoMaxMb,
 }: Props) {
   const [copied, setCopied] = useState(false);
   const [isClosed, setIsClosed] = useState(closed);
   const [busy, setBusy] = useState(false);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [videosOn, setVideosOn] = useState(videosEnabled);
+  const [maxMb, setMaxMb] = useState(videoMaxMb ?? 25);
+  const [videoBusy, setVideoBusy] = useState(false);
 
   const copy = async () => {
     try {
@@ -53,6 +60,31 @@ export default function AdminControls({
     }
     setDeleting(false);
     setConfirmingDelete(false);
+  };
+
+  // Persist on toggle or limit change. The server clamps to a 90 MB ceiling
+  // and echoes the stored values back, so we reflect its answer (not our
+  // request) into local state to surface the clamp.
+  const saveVideoSettings = async (enabled: boolean, mb: number) => {
+    setVideoBusy(true);
+    const res = await fetch(`/api/event/${code}/video-settings`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        adminToken,
+        enabled,
+        maxBytes: enabled ? mb * 1024 * 1024 : null,
+      }),
+    });
+    if (res.ok) {
+      const data = (await res.json()) as {
+        enabled: boolean;
+        maxBytes: number | null;
+      };
+      setVideosOn(data.enabled);
+      if (data.maxBytes != null) setMaxMb(Math.round(data.maxBytes / (1024 * 1024)));
+    }
+    setVideoBusy(false);
   };
 
   return (
@@ -103,6 +135,53 @@ export default function AdminControls({
         >
           {busy ? (isClosed ? "Reopening…" : "Closing…") : isClosed ? "Reopen" : "Close event"}
         </button>
+      </div>
+
+      <div class="border-t border-sand/40 pt-6">
+        <div class="flex items-center justify-between">
+          <div>
+            <p class="text-sm text-charcoal">
+              {videosOn ? "Videos allowed" : "Video uploads off"}
+            </p>
+            <p class="text-xs text-shagreen">
+              {videosOn
+                ? "Guests can upload videos up to the limit below."
+                : "Guests can upload photos only."}
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => saveVideoSettings(!videosOn, maxMb)}
+            disabled={videoBusy}
+            class="border border-charcoal px-6 py-3 text-xs uppercase tracking-widest hover:bg-charcoal hover:text-ivory transition-colors disabled:opacity-50"
+          >
+            {videoBusy
+              ? "Saving…"
+              : videosOn
+                ? "Turn off"
+                : "Allow video uploads"}
+          </button>
+        </div>
+        {videosOn && (
+          <label class="mt-4 flex items-center gap-3 text-sm text-charcoal">
+            Max size
+            <input
+              type="number"
+              min={1}
+              max={90}
+              value={maxMb}
+              disabled={videoBusy}
+              onChange={(e) => {
+                const v = Math.round(Number((e.target as HTMLInputElement).value));
+                const clamped = Math.min(Math.max(1, v || 1), 90);
+                setMaxMb(clamped);
+                void saveVideoSettings(true, clamped);
+              }}
+              class="w-20 border border-sand bg-parchment-light px-3 py-2 text-charcoal disabled:opacity-50"
+            />
+            MB
+          </label>
+        )}
       </div>
 
       <div class="border-t border-red-300/50 pt-6">

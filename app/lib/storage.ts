@@ -27,6 +27,13 @@ export interface UploadResult {
 
 export type ThumbSize = "grid" | "full";
 
+/**
+ * Workers `fetch` streams a request body when given a `ReadableStream` plus
+ * `duplex: "half"`, but the Workers `RequestInit` type omits `duplex`. This
+ * widens it for the two providers' streaming uploads.
+ */
+export type StreamRequestInit = RequestInit & { duplex: "half" };
+
 export interface StorageProvider {
   id: Provider;
   label: string;
@@ -34,13 +41,20 @@ export interface StorageProvider {
   exchangeCode(env: Bindings, code: string): Promise<TokenSet>;
   refreshAccessToken(env: Bindings, refreshToken: string): Promise<TokenSet>;
   createFolder(accessToken: string, name: string): Promise<FolderResult>;
-  uploadFile(
+  /** Stream a file's bytes straight to the provider without buffering. Returns its file_ref. */
+  streamUpload(
     accessToken: string,
     folderId: string,
     filename: string,
     mimeType: string,
-    data: ArrayBuffer,
+    body: ReadableStream<Uint8Array>,
   ): Promise<UploadResult>;
+  /** Stream original bytes back, forwarding an HTTP Range header for seekable playback. */
+  streamMedia(
+    accessToken: string,
+    fileRef: string,
+    range: string | null,
+  ): Promise<Response>;
   /**
    * Returns an image Response (thumbnail bytes) to stream to the client.
    * `grid` is a small, cheap thumbnail for the gallery; `full` is high

@@ -2,6 +2,7 @@ import type { Bindings } from "../global";
 import type {
   FolderResult,
   StorageProvider,
+  StreamRequestInit,
   ThumbSize,
   TokenSet,
   UploadResult,
@@ -11,8 +12,8 @@ import { redirectUri } from "./storage";
 const AUTH_ENDPOINT = "https://accounts.google.com/o/oauth2/v2/auth";
 const TOKEN_ENDPOINT = "https://oauth2.googleapis.com/token";
 const DRIVE_FILES = "https://www.googleapis.com/drive/v3/files";
-const DRIVE_UPLOAD =
-  "https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart";
+const DRIVE_UPLOAD_RESUMABLE =
+  "https://www.googleapis.com/upload/drive/v3/files?uploadType=resumable";
 const SCOPE = "https://www.googleapis.com/auth/drive.file";
 
 // Rendered edge (px) for grid thumbnails; covers 2x DPR on the ~300px tiles.
@@ -126,41 +127,41 @@ export const googleDrive: StorageProvider = {
     };
   },
 
-  async uploadFile(
+  async streamUpload(
     accessToken: string,
     folderId: string,
     filename: string,
     mimeType: string,
-    data: ArrayBuffer,
+    body: ReadableStream<Uint8Array>,
   ): Promise<UploadResult> {
-    const boundary = `pd${crypto.randomUUID().replace(/-/g, "")}`;
-    const metadata = JSON.stringify({ name: filename, parents: [folderId] });
-
-    const encoder = new TextEncoder();
-    const preamble = encoder.encode(
-      `--${boundary}\r\n` +
-        `Content-Type: application/json; charset=UTF-8\r\n\r\n` +
-        `${metadata}\r\n` +
-        `--${boundary}\r\n` +
-        `Content-Type: ${mimeType}\r\n\r\n`,
-    );
-    const epilogue = encoder.encode(`\r\n--${boundary}--\r\n`);
-
-    const body = new Uint8Array(
-      preamble.length + data.byteLength + epilogue.length,
-    );
-    body.set(preamble, 0);
-    body.set(new Uint8Array(data), preamble.length);
-    body.set(epilogue, preamble.length + data.byteLength);
-
-    const res = await fetch(DRIVE_UPLOAD, {
+    // Resumable upload is the only Drive form that streams the bytes AND sets
+    // name + parent: step 1 opens a session, step 2 streams the body to it.
+    const init = await fetch(DRIVE_UPLOAD_RESUMABLE, {
       method: "POST",
       headers: {
         Authorization: `Bearer ${accessToken}`,
-        "Content-Type": `multipart/related; boundary=${boundary}`,
+        "Content-Type": "application/json; charset=UTF-8",
+        "X-Upload-Content-Type": mimeType,
       },
-      body,
+      body: JSON.stringify({ name: filename, parents: [folderId] }),
     });
+    if (!init.ok) {
+      throw new Error(
+        `Google upload session failed: ${init.status} ${await init.text()}`,
+      );
+    }
+    const sessionUri = init.headers.get("Location");
+    if (!sessionUri) {
+      throw new Error("Google upload session missing Location");
+    }
+
+    const putInit: StreamRequestInit = {
+      method: "PUT",
+      headers: { "Content-Type": mimeType },
+      body,
+      duplex: "half",
+    };
+    const res = await fetch(sessionUri, putInit);
     if (!res.ok) {
       throw new Error(
         `Google upload failed: ${res.status} ${await res.text()}`,
@@ -168,6 +169,18 @@ export const googleDrive: StorageProvider = {
     }
     const json = (await res.json()) as { id: string };
     return { fileRef: json.id };
+  },
+
+  async streamMedia(
+    accessToken: string,
+    fileRef: string,
+    range: string | null,
+  ): Promise<Response> {
+    const headers: Record<string, string> = {
+      Authorization: `Bearer ${accessToken}`,
+    };
+    if (range) headers.Range = range;
+    return fetch(`${DRIVE_FILES}/${fileRef}?alt=media`, { headers });
   },
 
   async getThumbnail(

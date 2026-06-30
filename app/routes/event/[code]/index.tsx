@@ -18,6 +18,7 @@ export default createRoute(async (c) => {
     username: p.username,
     createdAt: p.created_at,
     takenAt: p.taken_at,
+    kind: p.mime_type.startsWith("video/") ? "video" : "image",
   }));
 
   const coverUrl = event.cover_photo_id
@@ -53,7 +54,13 @@ export default createRoute(async (c) => {
         <p class="text-charcoal-light mt-3">Add your photos to the collection.</p>
       </header>
 
-      <GuestApp code={event.id} closed={closed} initialPhotos={initialPhotos} />
+      <GuestApp
+        code={event.id}
+        closed={closed}
+        initialPhotos={initialPhotos}
+        videosEnabled={event.videos_enabled === 1}
+        videoMaxBytes={event.video_max_bytes}
+      />
     </section>,
     {
       title: event.title,

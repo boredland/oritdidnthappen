@@ -88,3 +88,49 @@ export function aggregateProgress(jobs: ProgressJob[]): UploadAggregate {
     totalWeight > 0 ? Math.round((transferred / totalWeight) * 100) : 0;
   return { done, uploading, errored, percent, uploadedCount: Math.floor(fractionalDone) };
 }
+
+/** Accepted image MIME types. Images are always allowed, regardless of event settings. */
+export const IMAGE_ACCEPTED = [
+  "image/jpeg",
+  "image/png",
+  "image/heic",
+  "image/webp",
+];
+/** Accepted video MIME types. Only allowed when the host enabled video for the event. */
+export const VIDEO_ACCEPTED = ["video/mp4", "video/quicktime", "video/webm"];
+
+export const IMAGE_MAX_BYTES = 25 * 1024 * 1024;
+/** Hard ceiling for any video; the per-event limit is clamped to this. Keeps us under the 100 MB Workers request-body limit. */
+export const VIDEO_CEILING_BYTES = 90 * 1024 * 1024;
+/** Per-event video limit when the host enables video without setting one. */
+export const VIDEO_DEFAULT_BYTES = 25 * 1024 * 1024;
+
+export type FileKind = "image" | "video";
+export type Classification =
+  | { ok: true; kind: FileKind }
+  | { ok: false; reason: string };
+
+/**
+ * Decide whether a picked file may be uploaded, and as what. Pure (works off
+ * `type`/`size` only) so it runs identically client-side and in tests. The
+ * server enforces the same constants on its own headers — this is the UI gate.
+ */
+export function classifyFile(
+  file: { type: string; size: number },
+  opts: { videosEnabled: boolean; videoMaxBytes: number | null },
+): Classification {
+  if (IMAGE_ACCEPTED.includes(file.type)) {
+    if (file.size > IMAGE_MAX_BYTES) {
+      return { ok: false, reason: "Too large (max 25MB)" };
+    }
+    return { ok: true, kind: "image" };
+  }
+  // Anything that isn't an accepted image is a video candidate.
+  if (!opts.videosEnabled) return { ok: false, reason: "Video not allowed" };
+  if (!VIDEO_ACCEPTED.includes(file.type)) {
+    return { ok: false, reason: "Unsupported type" };
+  }
+  const limit = opts.videoMaxBytes ?? VIDEO_CEILING_BYTES;
+  if (file.size > limit) return { ok: false, reason: "Too large" };
+  return { ok: true, kind: "video" };
+}
