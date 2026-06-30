@@ -1,5 +1,6 @@
 import { createRoute } from "honox/factory";
 import { deletePhoto, getEventByCode, getPhotoById } from "../../../lib/db";
+import { thumbCacheKey } from "../../../lib/media-url";
 import { ensureValidToken, getProvider } from "../../../lib/storage";
 
 // 1x1 transparent PNG, served while a provider thumbnail is unavailable.
@@ -23,18 +24,23 @@ export default createRoute(async (c) => {
   const photoId = c.req.param("photoId");
   if (!photoId) return placeholder();
 
-  // Guarded so a transient D1/token failure returns the placeholder, never an
-  // uncaught 500 (Cloudflare caches edge errors, which would blank the tile).
-  // Browser caching via Cache-Control covers repeat views; edge caching, if
-  // needed, belongs in a Cache Rule — the manual Cache API poisoned entries.
+  // Edge-cache read-through. The key is a private synthetic URL (see
+  // thumbCacheKey), never the public request URL — so a hit is always image
+  // bytes we stored, never a platform-cached error page. Everything is guarded:
+  // a transient D1/token failure returns the placeholder, never an uncaught 500
+  // (which Cloudflare would edge-cache and blank the tile).
   try {
+    const size = c.req.query("size") === "full" ? "full" : "grid";
+    const cache = (caches as unknown as { default: Cache }).default;
+    const cacheKey = thumbCacheKey(c.req.url, photoId, size);
+    const hit = await cache.match(cacheKey);
+    if (hit) return hit;
+
     const photo = await getPhotoById(c.env.DB, photoId);
     if (!photo) return placeholder();
 
     const event = await getEventByCode(c.env.DB, photo.event_id);
     if (!event || !event.access_token) return placeholder();
-
-    const size = c.req.query("size") === "full" ? "full" : "grid";
 
     const isVideo = photo.mime_type.startsWith("video/");
     if (isVideo && !photo.poster_ref) return placeholder();
@@ -52,12 +58,18 @@ export default createRoute(async (c) => {
       return placeholder();
     }
 
-    return new Response(res.body, {
-      headers: {
-        "Content-Type": res.headers.get("Content-Type") ?? "image/jpeg",
-        "Cache-Control": "public, max-age=86400",
-      },
-    });
+    // Buffer so the cached copy and the client copy are independent (no
+    // shared-stream race), then store and serve identical bytes. Only real,
+    // successful images reach this point — never a placeholder or error.
+    const bytes = await res.arrayBuffer();
+    const headers = {
+      "Content-Type": res.headers.get("Content-Type") ?? "image/jpeg",
+      "Cache-Control": "public, max-age=86400",
+    };
+    c.executionCtx.waitUntil(
+      cache.put(cacheKey, new Response(bytes, { headers })).catch(() => {}),
+    );
+    return new Response(bytes, { headers });
   } catch {
     return placeholder();
   }
