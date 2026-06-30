@@ -34,7 +34,10 @@ export default createRoute(async (c) => {
     const cache = (caches as unknown as { default: Cache }).default;
     const cacheKey = thumbCacheKey(c.req.url, photoId, size);
     const hit = await cache.match(cacheKey);
-    if (hit) return hit;
+    // Reconstruct so headers are mutable: cache.match returns an immutable
+    // Headers, and the secureHeaders middleware (runs after this route, outside
+    // the try/catch) calls .set() on it — throwing an uncaught 500 otherwise.
+    if (hit) return new Response(hit.body, hit);
 
     const photo = await getPhotoById(c.env.DB, photoId);
     if (!photo) return placeholder();
