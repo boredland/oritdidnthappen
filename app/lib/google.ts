@@ -204,6 +204,12 @@ export const googleDrive: StorageProvider = {
     return thumb.ok ? thumb : original();
   },
 
+
+  isFileNotFound(res: Response): boolean {
+    // Drive returns 404 for a deleted file. The grid path fetches metadata
+    // first (also 404), and the full path fetches alt=media (also 404).
+    return res.status === 404;
+  },
   async deleteFile(accessToken: string, fileRef: string): Promise<void> {
     const res = await fetch(`${DRIVE_FILES}/${fileRef}`, {
       method: "DELETE",

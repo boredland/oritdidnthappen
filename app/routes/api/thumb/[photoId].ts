@@ -1,5 +1,5 @@
 import { createRoute } from "honox/factory";
-import { getEventByCode, getPhotoById } from "../../../lib/db";
+import { deletePhoto, getEventByCode, getPhotoById } from "../../../lib/db";
 import { ensureValidToken, getProvider } from "../../../lib/storage";
 
 // 1x1 transparent PNG, served while a provider thumbnail is unavailable.
@@ -34,7 +34,15 @@ export default createRoute(async (c) => {
     const accessToken = await ensureValidToken(c.env.DB, c.env, event);
     const provider = getProvider(event.provider);
     const res = await provider.getThumbnail(accessToken, photo.file_ref, size);
-    if (!res.ok || !res.body) return placeholder();
+    if (!res.ok || !res.body) {
+      // The file is gone from the host's cloud — silently self-heal the DB
+      // so the gallery stops serving a broken thumbnail, then fall back to
+      // the placeholder. The next poll won't return this photo.
+      if (!res.ok && provider.isFileNotFound(res)) {
+        c.executionCtx.waitUntil(deletePhoto(c.env.DB, photo.event_id, photo.id));
+      }
+      return placeholder();
+    }
 
     return new Response(res.body, {
       headers: {

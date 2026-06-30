@@ -51,6 +51,8 @@ export interface StorageProvider {
     fileRef: string,
     size: ThumbSize,
   ): Promise<Response>;
+  /** Returns true when a thumbnail response indicates the file is gone from the host's cloud (404 / path_lookup/not_found). */
+  isFileNotFound(res: Response): boolean;
   /** Best-effort delete of a previously uploaded file by its fileRef. */
   deleteFile(accessToken: string, fileRef: string): Promise<void>;
 }

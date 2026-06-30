@@ -181,6 +181,12 @@ export const dropbox: StorageProvider = {
     });
   },
 
+  isFileNotFound(res: Response): boolean {
+    // Dropbox returns 409 with path_lookup/not_found for a deleted file.
+    // Our file_ref was created at upload, so a 409 here is a dangling ref.
+    return res.status === 409;
+  },
+
   async deleteFile(accessToken: string, fileRef: string): Promise<void> {
     const res = await fetch(DELETE_FILE, {
       method: "POST",
