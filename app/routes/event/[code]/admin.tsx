@@ -1,5 +1,6 @@
 import { createRoute } from "honox/factory";
 import AdminControls from "../../../islands/AdminControls";
+import AdminGallery from "../../../islands/AdminGallery";
 import {
   countGuests,
   countPhotos,
@@ -31,10 +32,10 @@ export default createRoute(async (c) => {
 
   const now = Math.floor(Date.now() / 1000);
   const closed = event.expires_at != null && event.expires_at <= now;
-  const [photoCount, guestCount, recent] = await Promise.all([
+  const [photoCount, guestCount, photos] = await Promise.all([
     countPhotos(c.env.DB, event.id),
     countGuests(c.env.DB, event.id),
-    getPhotosByEvent(c.env.DB, event.id, 10, 0),
+    getPhotosByEvent(c.env.DB, event.id, 200, 0),
   ]);
 
   const shareUrl = `${c.env.BASE_URL}/event/${event.id}`;
@@ -87,25 +88,17 @@ export default createRoute(async (c) => {
         </div>
       )}
 
-      {recent.length > 0 && (
-        <div class="mt-12">
-          <p class="text-xs uppercase tracking-widest text-taupe mb-4">
-            Recent uploads
-          </p>
-          <div class="grid grid-cols-3 sm:grid-cols-5 gap-px bg-sand/40">
-            {recent.map((p) => (
-              <div class="aspect-square bg-parchment-dark overflow-hidden">
-                <img
-                  src={`/api/thumb/${p.id}`}
-                  alt={`Photo by ${p.username}`}
-                  loading="lazy"
-                  class="h-full w-full object-cover"
-                />
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
+      <div class="mt-12">
+        <p class="text-xs uppercase tracking-widest text-taupe mb-4">
+          Photos · tap to set cover or delete
+        </p>
+        <AdminGallery
+          code={event.id}
+          adminToken={event.admin_token}
+          initialPhotos={photos.map((p) => ({ id: p.id, username: p.username }))}
+          initialCover={event.cover_photo_id}
+        />
+      </div>
     </section>,
     { title: `Admin · ${event.title}` },
   );

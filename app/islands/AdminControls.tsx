@@ -56,6 +56,14 @@ export default function AdminControls({
             {copied ? "Copied" : "Copy"}
           </button>
         </div>
+        <a
+          href={shareUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          class="inline-block mt-3 text-sm underline underline-offset-2 text-charcoal hover:text-taupe"
+        >
+          View guest page ↗
+        </a>
       </div>
 
       <div class="flex items-center justify-between border-t border-sand/40 pt-6">

@@ -30,6 +30,119 @@ const ACCEPTED = ["image/jpeg", "image/png", "image/heic", "image/webp"];
 const MAX_BYTES = 25 * 1024 * 1024;
 const POLL_MS = 10_000;
 
+type ShareResult = "shared" | "copied" | "failed";
+
+// Native Web Share API with a clipboard fallback for browsers without it.
+async function nativeShareUrl(
+  url: string,
+  title: string,
+  text: string,
+): Promise<ShareResult> {
+  const data = { title, text, url };
+  if ("share" in navigator) {
+    try {
+      if (!("canShare" in navigator) || navigator.canShare(data)) {
+        await navigator.share(data);
+        return "shared";
+      }
+    } catch (e) {
+      if (e instanceof Error && e.name === "AbortError") return "shared";
+    }
+  }
+  try {
+    await navigator.clipboard.writeText(url);
+    return "copied";
+  } catch {
+    return "failed";
+  }
+}
+
+// Share one photo: the actual image file where supported (best on mobile),
+// otherwise fall back to sharing/copying a link to the image.
+async function nativeSharePhoto(
+  photoId: string,
+  username: string,
+): Promise<ShareResult> {
+  const path = `/api/thumb/${photoId}`;
+  if ("canShare" in navigator) {
+    try {
+      const res = await fetch(path);
+      if (res.ok) {
+        const blob = await res.blob();
+        const ext = (blob.type.split("/")[1] ?? "jpg").replace("jpeg", "jpg");
+        const file = new File([blob], `photo-by-${username}.${ext}`, {
+          type: blob.type || "image/jpeg",
+        });
+        if (navigator.canShare({ files: [file] })) {
+          await navigator.share({ files: [file] });
+          return "shared";
+        }
+      }
+    } catch (e) {
+      if (e instanceof Error && e.name === "AbortError") return "shared";
+    }
+  }
+  return nativeShareUrl(`${location.origin}${path}`, `Photo by ${username}`, "");
+}
+
+function urlBase64ToUint8Array(base64: string): Uint8Array<ArrayBuffer> {
+  const padding = "=".repeat((4 - (base64.length % 4)) % 4);
+  const b64 = (base64 + padding).replace(/-/g, "+").replace(/_/g, "/");
+  const raw = atob(b64);
+  const out = new Uint8Array(new ArrayBuffer(raw.length));
+  for (let i = 0; i < raw.length; i++) out[i] = raw.charCodeAt(i);
+  return out;
+}
+
+type PushState = "unsupported" | "idle" | "on" | "working";
+
+// Subscribe this browser to new-photo notifications for one event.
+async function subscribeToEvent(code: string): Promise<boolean> {
+  if (Notification.permission === "denied") return false;
+  const perm = await Notification.requestPermission();
+  if (perm !== "granted") return false;
+
+  const keyRes = await fetch("/api/push/key");
+  if (!keyRes.ok) return false;
+  const keyJson: unknown = await keyRes.json();
+  if (
+    !keyJson ||
+    typeof keyJson !== "object" ||
+    !("publicKey" in keyJson) ||
+    typeof keyJson.publicKey !== "string"
+  ) {
+    return false;
+  }
+  const publicKey = keyJson.publicKey;
+
+  const reg = await navigator.serviceWorker.ready;
+  const sub =
+    (await reg.pushManager.getSubscription()) ??
+    (await reg.pushManager.subscribe({
+      userVisibleOnly: true,
+      applicationServerKey: urlBase64ToUint8Array(publicKey),
+    }));
+
+  const res = await fetch("/api/push/subscribe", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ eventCode: code, subscription: sub.toJSON() }),
+  });
+  return res.ok;
+}
+
+async function unsubscribeFromEvent(code: string): Promise<boolean> {
+  const reg = await navigator.serviceWorker.ready;
+  const sub = await reg.pushManager.getSubscription();
+  if (!sub) return true;
+  const res = await fetch("/api/push/unsubscribe", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ eventCode: code, endpoint: sub.endpoint }),
+  });
+  return res.ok;
+}
+
 export default function GuestApp({ code, closed, initialPhotos }: Props) {
   const [session, setSession] = useState<Session | null>(null);
   const [photos, setPhotos] = useState<PhotoItem[]>(initialPhotos);
@@ -37,6 +150,7 @@ export default function GuestApp({ code, closed, initialPhotos }: Props) {
   const [dragging, setDragging] = useState(false);
   const [editingName, setEditingName] = useState(false);
   const [lightbox, setLightbox] = useState<number | null>(null);
+  const [push, setPush] = useState<PushState>("idle");
 
   const fileInput = useRef<HTMLInputElement | null>(null);
   // Newest photo timestamp drives incremental polling.
@@ -193,6 +307,82 @@ export default function GuestApp({ code, closed, initialPhotos }: Props) {
     return () => window.removeEventListener("keydown", onKey);
   }, [lightbox, photos.length]);
 
+  const [flash, setFlash] = useState<string | null>(null);
+  const flashMsg = (msg: string) => {
+    setFlash(msg);
+    window.setTimeout(() => setFlash(null), 2000);
+  };
+
+  const onShareGallery = useCallback(async () => {
+    const r = await nativeShareUrl(
+      `${location.origin}/event/${code}`,
+      "or it didn't happen",
+      "Add your photos to the collection.",
+    );
+    if (r === "copied") flashMsg("Link copied");
+    else if (r === "failed") flashMsg("Couldn't share");
+  }, [code]);
+
+  const onSharePhoto = useCallback(async (photo: PhotoItem) => {
+    const r = await nativeSharePhoto(photo.id, photo.username);
+    if (r === "copied") flashMsg("Link copied");
+    else if (r === "failed") flashMsg("Couldn't share");
+  }, []);
+
+  // Detect push support + whether this browser is already subscribed.
+  useEffect(() => {
+    if (
+      !("serviceWorker" in navigator) ||
+      !("PushManager" in window) ||
+      !("Notification" in window)
+    ) {
+      setPush("unsupported");
+      return;
+    }
+    void (async () => {
+      try {
+        const reg = await navigator.serviceWorker.ready;
+        const sub = await reg.pushManager.getSubscription();
+        if (!sub) return;
+        const res = await fetch(
+          `/api/push/me?eventCode=${code}&endpoint=${encodeURIComponent(sub.endpoint)}`,
+        );
+        if (!res.ok) return;
+        const json: unknown = await res.json();
+        if (
+          json &&
+          typeof json === "object" &&
+          "subscribed" in json &&
+          json.subscribed === true
+        ) {
+          setPush("on");
+        }
+      } catch {
+        /* leave as idle */
+      }
+    })();
+  }, [code]);
+
+  const togglePush = useCallback(async () => {
+    const wasOn = push === "on";
+    setPush("working");
+    try {
+      const ok = wasOn
+        ? await unsubscribeFromEvent(code)
+        : await subscribeToEvent(code);
+      if (wasOn) {
+        setPush(ok ? "idle" : "on");
+        flashMsg(ok ? "Notifications off" : "Couldn't update");
+      } else {
+        setPush(ok ? "on" : "idle");
+        flashMsg(ok ? "You'll be notified of new photos" : "Notifications blocked");
+      }
+    } catch {
+      setPush(wasOn ? "on" : "idle");
+      flashMsg("Couldn't update");
+    }
+  }, [code, push]);
+
   return (
     <div>
       {!closed && (
@@ -269,9 +459,35 @@ export default function GuestApp({ code, closed, initialPhotos }: Props) {
       )}
 
       <div class="mt-6 flex items-center justify-between text-sm">
-        <span class="text-taupe">
-          {photos.length} {photos.length === 1 ? "photo" : "photos"}
-        </span>
+        <div class="flex items-center gap-4">
+          <span class="text-taupe">
+            {photos.length} {photos.length === 1 ? "photo" : "photos"}
+          </span>
+          {photos.length > 0 && (
+            <button
+              type="button"
+              onClick={onShareGallery}
+              class="inline-flex items-center gap-1.5 text-taupe hover:text-charcoal transition-colors"
+            >
+              <ShareIcon /> Share
+            </button>
+          )}
+          {push !== "unsupported" && !closed && (
+            <button
+              type="button"
+              onClick={togglePush}
+              disabled={push === "working"}
+              class={`inline-flex items-center gap-1.5 transition-colors disabled:opacity-50 ${
+                push === "on"
+                  ? "text-charcoal"
+                  : "text-taupe hover:text-charcoal"
+              }`}
+            >
+              <BellIcon filled={push === "on"} />
+              {push === "on" ? "Notifying" : "Notify me"}
+            </button>
+          )}
+        </div>
         {session && (
           <UsernameControl
             username={session.username}
@@ -324,7 +540,14 @@ export default function GuestApp({ code, closed, initialPhotos }: Props) {
           onPrev={() => setLightbox((i) => (i === null ? null : i - 1))}
           onNext={() => setLightbox((i) => (i === null ? null : i + 1))}
           onClose={() => setLightbox(null)}
+          onShare={onSharePhoto}
         />
+      )}
+
+      {flash && (
+        <div class="fixed bottom-6 left-1/2 -translate-x-1/2 z-[60] bg-charcoal text-ivory text-sm tracking-wide px-4 py-2">
+          {flash}
+        </div>
       )}
     </div>
   );
@@ -388,6 +611,7 @@ function Lightbox({
   onPrev,
   onNext,
   onClose,
+  onShare,
 }: {
   photo: PhotoItem;
   hasPrev: boolean;
@@ -395,20 +619,34 @@ function Lightbox({
   onPrev: () => void;
   onNext: () => void;
   onClose: () => void;
+  onShare: (photo: PhotoItem) => void;
 }) {
   return (
     <div
       onClick={onClose}
       class="fixed inset-0 z-50 bg-charcoal/95 flex flex-col items-center justify-center p-4"
     >
-      <button
-        type="button"
-        onClick={onClose}
-        class="absolute top-5 right-6 text-ivory/70 hover:text-ivory text-2xl"
-        aria-label="Close"
-      >
-        ×
-      </button>
+      <div class="absolute top-5 right-6 flex items-center gap-5">
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            onShare(photo);
+          }}
+          class="text-ivory/70 hover:text-ivory"
+          aria-label="Share photo"
+        >
+          <ShareIcon />
+        </button>
+        <button
+          type="button"
+          onClick={onClose}
+          class="text-ivory/70 hover:text-ivory text-2xl leading-none"
+          aria-label="Close"
+        >
+          ×
+        </button>
+      </div>
       {hasPrev && (
         <button
           type="button"
@@ -471,6 +709,58 @@ function CameraIcon() {
         stroke-linejoin="round"
       />
       <circle cx="12" cy="13" r="3.4" stroke="currentColor" stroke-width="1.1" />
+    </svg>
+  );
+}
+
+function ShareIcon() {
+  return (
+    <svg
+      width="18"
+      height="18"
+      viewBox="0 0 24 24"
+      fill="none"
+      class="inline-block"
+      aria-hidden="true"
+    >
+      <path
+        d="M12 15 V3 M8 6.5 L12 3 L16 6.5"
+        stroke="currentColor"
+        stroke-width="1.4"
+        stroke-linejoin="round"
+      />
+      <path
+        d="M7 10 H5 V21 H19 V10 H17"
+        stroke="currentColor"
+        stroke-width="1.4"
+        stroke-linejoin="round"
+      />
+    </svg>
+  );
+}
+
+function BellIcon({ filled }: { filled: boolean }) {
+  return (
+    <svg
+      width="16"
+      height="16"
+      viewBox="0 0 24 24"
+      fill={filled ? "currentColor" : "none"}
+      class="inline-block"
+      aria-hidden="true"
+    >
+      <path
+        d="M6 9 a6 6 0 0 1 12 0 c0 5 2 6 2 6 H4 s2 -1 2 -6 Z"
+        stroke="currentColor"
+        stroke-width="1.4"
+        stroke-linejoin="round"
+      />
+      <path
+        d="M10 20 a2 2 0 0 0 4 0"
+        stroke="currentColor"
+        stroke-width="1.4"
+        stroke-linejoin="round"
+      />
     </svg>
   );
 }

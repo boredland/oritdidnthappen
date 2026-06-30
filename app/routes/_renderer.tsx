@@ -1,9 +1,10 @@
 import { jsxRenderer } from "hono/jsx-renderer";
 import { Link, Script } from "honox/server";
 
-export default jsxRenderer(({ children, title, description }) => {
+export default jsxRenderer(({ children, title, description, image }) => {
   const pageTitle = title ? `${title} · or it didn't happen` : "or it didn't happen";
   const desc = description ?? "Share the moment. Together.";
+  const ogImage = image ?? "/logo-512.png";
   return (
     <html lang="en">
       <head>
@@ -14,10 +15,14 @@ export default jsxRenderer(({ children, title, description }) => {
         <meta property="og:title" content={pageTitle} />
         <meta property="og:description" content={desc} />
         <meta property="og:type" content="website" />
-        <meta property="og:image" content="/logo-512.png" />
+        <meta property="og:image" content={ogImage} />
         <link rel="icon" href="/logo.svg" type="image/svg+xml" />
         <link rel="icon" href="/favicon-32.png" sizes="32x32" type="image/png" />
         <link rel="apple-touch-icon" href="/logo-512.png" />
+        <link rel="manifest" href="/manifest.webmanifest" />
+        <meta name="theme-color" content="#F5F0E8" />
+        <meta name="apple-mobile-web-app-capable" content="yes" />
+        <meta name="apple-mobile-web-app-title" content="oidh" />
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link
           rel="preconnect"
@@ -48,7 +53,7 @@ export default jsxRenderer(({ children, title, description }) => {
         <main class="flex-1">{children}</main>
         <footer class="border-t border-sand/40 mt-24">
           <div class="max-w-5xl mx-auto px-6 py-12 text-center text-taupe text-sm tracking-wide">
-            <p>Photos go straight to your cloud. We never store them.</p>
+            <p>Photos go straight to the host's own cloud. We never store them.</p>
             <p class="mt-3 space-x-4">
               <a href="/privacy" class="hover:text-charcoal underline-offset-2 hover:underline">
                 Privacy

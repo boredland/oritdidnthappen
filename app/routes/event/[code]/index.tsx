@@ -18,8 +18,21 @@ export default createRoute(async (c) => {
     createdAt: p.created_at,
   }));
 
+  const coverUrl = event.cover_photo_id
+    ? `/api/thumb/${event.cover_photo_id}`
+    : null;
+
   return c.render(
     <section class="max-w-5xl mx-auto px-6 py-12 md:py-16">
+      {coverUrl && (
+        <div class="mb-10 aspect-[16/9] overflow-hidden bg-parchment-dark">
+          <img
+            src={coverUrl}
+            alt={`${event.title} cover`}
+            class="h-full w-full object-cover"
+          />
+        </div>
+      )}
       <header class="text-center mb-10">
         <h1 class="font-heading text-4xl md:text-5xl font-light tracking-wide">
           {event.title}
@@ -29,6 +42,10 @@ export default createRoute(async (c) => {
 
       <GuestApp code={event.id} closed={closed} initialPhotos={initialPhotos} />
     </section>,
-    { title: event.title, description: `Share photos from ${event.title}` },
+    {
+      title: event.title,
+      description: `Share photos from ${event.title}`,
+      image: coverUrl ?? undefined,
+    },
   );
 });

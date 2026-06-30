@@ -23,6 +23,13 @@ export default createRoute((c) => {
     <>
       <section class="grain bg-parchment">
         <div class="max-w-2xl mx-auto px-6 py-28 md:py-40 text-center relative">
+          <img
+            src="/logo.svg"
+            alt=""
+            width="72"
+            height="72"
+            class="mx-auto mb-10 opacity-90"
+          />
           <h1 class="font-heading font-light tracking-wide text-5xl md:text-7xl leading-[1.05]">
             Share the moment.
             <br />

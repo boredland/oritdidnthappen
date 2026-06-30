@@ -41,6 +41,8 @@ export interface StorageProvider {
   ): Promise<UploadResult>;
   /** Returns an image Response (thumbnail bytes) to stream to the client. */
   getThumbnail(accessToken: string, fileRef: string): Promise<Response>;
+  /** Best-effort delete of a previously uploaded file by its fileRef. */
+  deleteFile(accessToken: string, fileRef: string): Promise<void>;
 }
 
 const PROVIDERS: Record<Provider, StorageProvider> = {

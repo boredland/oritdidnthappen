@@ -12,6 +12,7 @@ const TOKEN_ENDPOINT = "https://api.dropboxapi.com/oauth2/token";
 const CREATE_FOLDER = "https://api.dropboxapi.com/2/files/create_folder_v2";
 const UPLOAD = "https://content.dropboxapi.com/2/files/upload";
 const GET_THUMBNAIL = "https://content.dropboxapi.com/2/files/get_thumbnail_v2";
+const DELETE_FILE = "https://api.dropboxapi.com/2/files/delete_v2";
 const SCOPE = "files.content.write files.content.read";
 
 interface DropboxTokenResponse {
@@ -173,5 +174,23 @@ export const dropbox: StorageProvider = {
         }),
       },
     });
+  },
+
+  async deleteFile(accessToken: string, fileRef: string): Promise<void> {
+    const res = await fetch(DELETE_FILE, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ path: fileRef }),
+    });
+    // path_lookup/not_found means it's already gone; treat as success.
+    if (!res.ok) {
+      const body = await res.text();
+      if (!body.includes("not_found")) {
+        throw new Error(`Dropbox delete failed: ${res.status} ${body}`);
+      }
+    }
   },
 };

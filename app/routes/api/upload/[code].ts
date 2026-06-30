@@ -2,6 +2,7 @@ import { createRoute } from "honox/factory";
 import { addPhoto, getEventByCode, getGuestBySession } from "../../../lib/db";
 import { generateId } from "../../../lib/crypto";
 import { ensureValidToken, getProvider } from "../../../lib/storage";
+import { notifyNewPhotos } from "../../../lib/notify";
 
 const ACCEPTED: Record<string, true> = {
   "image/jpeg": true,
@@ -90,6 +91,12 @@ export const POST = createRoute(async (c) => {
         reason: e instanceof Error ? e.message : "Upload failed",
       });
     }
+  }
+
+  if (uploaded.length > 0) {
+    c.executionCtx.waitUntil(
+      notifyNewPhotos(c.env, event, uploaded.length, guest.username),
+    );
   }
 
   return c.json({ uploaded, errors });

@@ -13,6 +13,7 @@ export interface EventRow {
   folder_url: string | null;
   created_at: number;
   expires_at: number | null;
+  cover_photo_id: string | null;
 }
 
 export interface GuestRow {
@@ -219,6 +220,31 @@ export async function getPhotoById(
     .first<PhotoRow>();
 }
 
+/** Delete a photo row, scoped to its event. Returns true if a row was removed. */
+export async function deletePhoto(
+  db: D1Database,
+  eventId: string,
+  photoId: string,
+): Promise<boolean> {
+  const res = await db
+    .prepare(`DELETE FROM photos WHERE id = ? AND event_id = ?`)
+    .bind(photoId, eventId)
+    .run();
+  return (res.meta.changes ?? 0) > 0;
+}
+
+/** Set (or clear, with null) the event's cover photo. */
+export async function setCoverPhoto(
+  db: D1Database,
+  eventId: string,
+  photoId: string | null,
+): Promise<void> {
+  await db
+    .prepare(`UPDATE events SET cover_photo_id = ? WHERE id = ?`)
+    .bind(photoId, eventId)
+    .run();
+}
+
 export async function getPhotosByEvent(
   db: D1Database,
   eventId: string,
@@ -266,4 +292,103 @@ export async function countPhotos(
     .bind(eventId)
     .first<{ n: number }>();
   return row?.n ?? 0;
+}
+
+export interface PushSubRow {
+  id: string;
+  event_id: string;
+  endpoint: string;
+  p256dh: string;
+  auth: string;
+}
+
+export async function addPushSubscription(
+  db: D1Database,
+  s: {
+    id: string;
+    event_id: string;
+    endpoint: string;
+    p256dh: string;
+    auth: string;
+    user_agent: string | null;
+  },
+): Promise<void> {
+  await db
+    .prepare(
+      `INSERT INTO push_subscriptions
+         (id, event_id, endpoint, p256dh, auth, user_agent)
+       VALUES (?1, ?2, ?3, ?4, ?5, ?6)
+       ON CONFLICT (event_id, endpoint) DO UPDATE SET
+         p256dh = excluded.p256dh,
+         auth = excluded.auth,
+         user_agent = excluded.user_agent`,
+    )
+    .bind(s.id, s.event_id, s.endpoint, s.p256dh, s.auth, s.user_agent)
+    .run();
+}
+
+export async function removePushSubscription(
+  db: D1Database,
+  eventId: string,
+  endpoint: string,
+): Promise<void> {
+  await db
+    .prepare(`DELETE FROM push_subscriptions WHERE event_id = ? AND endpoint = ?`)
+    .bind(eventId, endpoint)
+    .run();
+}
+
+export async function deleteSubscriptionByEndpoint(
+  db: D1Database,
+  endpoint: string,
+): Promise<void> {
+  await db
+    .prepare(`DELETE FROM push_subscriptions WHERE endpoint = ?`)
+    .bind(endpoint)
+    .run();
+}
+
+export async function isSubscribed(
+  db: D1Database,
+  eventId: string,
+  endpoint: string,
+): Promise<boolean> {
+  const row = await db
+    .prepare(`SELECT 1 FROM push_subscriptions WHERE event_id = ? AND endpoint = ?`)
+    .bind(eventId, endpoint)
+    .first();
+  return row !== null;
+}
+
+export async function getEventSubscriptions(
+  db: D1Database,
+  eventId: string,
+): Promise<PushSubRow[]> {
+  const { results } = await db
+    .prepare(
+      `SELECT id, event_id, endpoint, p256dh, auth
+       FROM push_subscriptions WHERE event_id = ?`,
+    )
+    .bind(eventId)
+    .all<PushSubRow>();
+  return results ?? [];
+}
+
+export async function deleteSubscriptionById(
+  db: D1Database,
+  id: string,
+): Promise<void> {
+  await db.prepare(`DELETE FROM push_subscriptions WHERE id = ?`).bind(id).run();
+}
+
+/** Event ids an endpoint is currently subscribed to (for SW re-subscription). */
+export async function getEventCodesByEndpoint(
+  db: D1Database,
+  endpoint: string,
+): Promise<string[]> {
+  const { results } = await db
+    .prepare(`SELECT event_id FROM push_subscriptions WHERE endpoint = ?`)
+    .bind(endpoint)
+    .all<{ event_id: string }>();
+  return (results ?? []).map((r) => r.event_id);
 }

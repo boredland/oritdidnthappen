@@ -171,4 +171,15 @@ export const googleDrive: StorageProvider = {
       headers: { Authorization: `Bearer ${accessToken}` },
     });
   },
+
+  async deleteFile(accessToken: string, fileRef: string): Promise<void> {
+    const res = await fetch(`${DRIVE_FILES}/${fileRef}`, {
+      method: "DELETE",
+      headers: { Authorization: `Bearer ${accessToken}` },
+    });
+    // 404 = already gone; treat as success.
+    if (!res.ok && res.status !== 404) {
+      throw new Error(`Google delete failed: ${res.status}`);
+    }
+  },
 };

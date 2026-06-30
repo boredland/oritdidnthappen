@@ -3,6 +3,7 @@ import type {} from "hono";
 type Head = {
   title?: string;
   description?: string;
+  image?: string;
 };
 
 declare module "hono" {
@@ -27,4 +28,7 @@ export type Bindings = {
   EMAIL: SendEmail;
   EMAIL_FROM: string;
   BASE_URL: string;
+  VAPID_PUBLIC_KEY?: string;
+  VAPID_PRIVATE_KEY?: string;
+  VAPID_SUBJECT?: string;
 };
