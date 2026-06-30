@@ -5,6 +5,7 @@ import {
   supportsBackgroundUpload,
 } from "../lib/bgupload";
 import { readTakenAt } from "../lib/exif";
+import { thumbUrl } from "../lib/media-url";
 import { generatePoster } from "../lib/poster";
 import { nextPhotoId, SLIDE_MS } from "../lib/slideshow";
 import { dampDrag, resolveSwipe } from "../lib/swipe";
@@ -101,7 +102,7 @@ async function nativeSharePhoto(
   photoId: string,
   username: string,
 ): Promise<ShareResult> {
-  const path = `/api/thumb/${photoId}?size=full`;
+  const path = thumbUrl(photoId, "full");
   if ("canShare" in navigator) {
     try {
       const res = await fetch(path);
@@ -901,7 +902,7 @@ export default function GuestApp({
             }`}
           >
             <img
-              src={`/api/thumb/${photo.id}`}
+              src={thumbUrl(photo.id)}
               alt={`Photo by ${photo.username}`}
               loading="lazy"
               width={300}
@@ -1101,14 +1102,14 @@ function Lightbox({
             controls
             playsInline
             preload="metadata"
-            poster={`/api/thumb/${photo.id}?size=full`}
+            poster={thumbUrl(photo.id, "full")}
             src={`/api/media/${photo.id}`}
             onClick={(e) => e.stopPropagation()}
             class="lightbox-img-in max-h-[85vh] max-w-full object-contain"
           />
         ) : (
           <img
-            src={`/api/thumb/${photo.id}?size=full`}
+            src={thumbUrl(photo.id, "full")}
             alt={`Photo by ${photo.username}`}
             onClick={(e) => e.stopPropagation()}
             class="lightbox-img-in max-h-[85vh] max-w-full object-contain"
@@ -1248,7 +1249,7 @@ function Slideshow({
             key={item.id}
             ref={videoRef}
             src={`/api/media/${item.id}`}
-            poster={`/api/thumb/${item.id}?size=full`}
+            poster={thumbUrl(item.id, "full")}
             playsInline
             muted={muted}
             onEnded={advance}
@@ -1258,7 +1259,7 @@ function Slideshow({
         ) : (
           <img
             key={item.id}
-            src={`/api/thumb/${item.id}?size=full`}
+            src={thumbUrl(item.id, "full")}
             alt={`Photo by ${item.username}`}
             class="max-h-screen max-w-full object-contain"
           />

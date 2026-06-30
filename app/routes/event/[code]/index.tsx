@@ -2,6 +2,7 @@ import { createRoute } from "honox/factory";
 import GalleryTracker from "../../../islands/GalleryTracker";
 import GuestApp, { type PhotoItem } from "../../../islands/GuestApp";
 import { getEventByCode, getPhotosByEvent } from "../../../lib/db";
+import { thumbUrl } from "../../../lib/media-url";
 
 export default createRoute(async (c) => {
   const code = c.req.param("code");
@@ -22,7 +23,7 @@ export default createRoute(async (c) => {
   }));
 
   const coverUrl = event.cover_photo_id
-    ? `/api/thumb/${event.cover_photo_id}?size=full`
+    ? thumbUrl(event.cover_photo_id, "full")
     : null;
 
   return c.render(

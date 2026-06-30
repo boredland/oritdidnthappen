@@ -1,4 +1,5 @@
 import { useState } from "hono/jsx";
+import { thumbUrl } from "../lib/media-url";
 
 export interface AdminPhoto {
   id: string;
@@ -79,7 +80,7 @@ export default function AdminGallery({
         {photos.map((p) => (
           <div class="relative w-full aspect-square bg-parchment-dark overflow-hidden group">
             <img
-              src={`/api/thumb/${p.id}`}
+              src={thumbUrl(p.id)}
               alt={`Photo by ${p.username}`}
               loading="lazy"
               class="h-full w-full object-cover"
@@ -91,7 +92,9 @@ export default function AdminGallery({
             )}
             <div
               class={`absolute inset-0 flex flex-col items-center justify-center gap-2 bg-charcoal/70 transition-opacity ${
-                busy === p.id ? "opacity-100" : "opacity-0 group-hover:opacity-100"
+                busy === p.id
+                  ? "opacity-100"
+                  : "opacity-0 group-hover:opacity-100"
               }`}
             >
               <button
