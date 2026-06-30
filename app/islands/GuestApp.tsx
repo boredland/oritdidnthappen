@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "hono/jsx";
 import { readTakenAt } from "../lib/exif";
 import { dampDrag, resolveSwipe } from "../lib/swipe";
+import { aggregateProgress, mapPool, UPLOAD_CONCURRENCY } from "../lib/upload";
 
 export interface PhotoItem {
   id: string;
@@ -42,6 +43,7 @@ type UploadStatus = "uploading" | "done" | "error";
 interface UploadJob {
   key: string;
   name: string;
+  size: number;
   progress: number;
   status: UploadStatus;
   error?: string;
@@ -267,21 +269,22 @@ export default function GuestApp({ code, closed, initialPhotos }: Props) {
     async (files: FileList | File[]) => {
       if (!session || closed) return;
       const list = Array.from(files);
-      for (const file of list) {
-        const key = `${file.name}-${Date.now()}-${Math.random()}`;
+      const stamp = Date.now();
+      await mapPool(list, UPLOAD_CONCURRENCY, async (file, i) => {
+        const key = `${file.name}-${stamp}-${i}`;
         if (!ACCEPTED.includes(file.type)) {
-          addJob({ key, name: file.name, progress: 0, status: "error", error: "Unsupported type" });
-          continue;
+          addJob({ key, name: file.name, size: file.size, progress: 0, status: "error", error: "Unsupported type" });
+          return;
         }
         if (file.size > MAX_BYTES) {
-          addJob({ key, name: file.name, progress: 0, status: "error", error: "Too large (max 25MB)" });
-          continue;
+          addJob({ key, name: file.name, size: file.size, progress: 0, status: "error", error: "Too large (max 25MB)" });
+          return;
         }
-        addJob({ key, name: file.name, progress: 0, status: "uploading" });
+        addJob({ key, name: file.name, size: file.size, progress: 0, status: "uploading" });
         // Read EXIF capture time client-side before upload (null when absent).
         const takenAt = await readTakenAt(file);
         await uploadOne(file, key, takenAt);
-      }
+      });
     },
     [session, closed],
   );
@@ -289,55 +292,66 @@ export default function GuestApp({ code, closed, initialPhotos }: Props) {
   const addJob = (job: UploadJob) => setJobs((prev) => [job, ...prev]);
   const patchJob = (key: string, patch: Partial<UploadJob>) =>
     setJobs((prev) => prev.map((j) => (j.key === key ? { ...j, ...patch } : j)));
-  const uploadOne = (file: File, key: string, takenAt: number | null) =>
-    new Promise<void>((resolve) => {
-      const form = new FormData();
-      form.append("file", file);
-      form.append("takenAt", takenAt != null ? String(takenAt) : "");
-      const xhr = new XMLHttpRequest();
-      xhr.open("POST", `/api/upload/${code}`);
-      xhr.setRequestHeader("Authorization", `Bearer ${session!.sessionToken}`);
+  const uploadOne = (file: File, key: string, takenAt: number | null) => {
+    const { promise, resolve } = Promise.withResolvers<void>();
+    const form = new FormData();
+    form.append("file", file);
+    form.append("takenAt", takenAt != null ? String(takenAt) : "");
+    const xhr = new XMLHttpRequest();
+    xhr.open("POST", `/api/upload/${code}`);
+    xhr.setRequestHeader("Authorization", `Bearer ${session!.sessionToken}`);
 
-      xhr.upload.onprogress = (e) => {
-        if (e.lengthComputable) {
-          patchJob(key, { progress: Math.round((e.loaded / e.total) * 100) });
-        }
-      };
-      xhr.onload = () => {
-        if (xhr.status >= 200 && xhr.status < 300) {
-          try {
-            const data = JSON.parse(xhr.responseText) as {
-              uploaded: PhotoItem[];
-            };
-            if (data.uploaded?.length) {
-              const p = data.uploaded[0];
-              setPhotos((prev) =>
-                prev.some((x) => x.id === p.id)
-                  ? prev
-                  : sortPhotos([...prev, p], sortRef.current ?? "taken"),
-              );
-              if (p.createdAt > (sinceRef.current ?? 0))
-                sinceRef.current = p.createdAt;
-            }
-            patchJob(key, { progress: 100, status: "done" });
-            window.setTimeout(
-              () => setJobs((prev) => prev.filter((j) => j.key !== key)),
-              1500,
+    xhr.upload.onprogress = (e) => {
+      if (e.lengthComputable) {
+        patchJob(key, { progress: Math.round((e.loaded / e.total) * 100) });
+      }
+    };
+    xhr.onload = () => {
+      if (xhr.status >= 200 && xhr.status < 300) {
+        try {
+          const data = JSON.parse(xhr.responseText) as {
+            uploaded: PhotoItem[];
+          };
+          if (data.uploaded?.length) {
+            const p = data.uploaded[0];
+            setPhotos((prev) =>
+              prev.some((x) => x.id === p.id)
+                ? prev
+                : sortPhotos([...prev, p], sortRef.current ?? "taken"),
             );
-          } catch {
-            patchJob(key, { status: "error", error: "Bad response" });
+            if (p.createdAt > (sinceRef.current ?? 0))
+              sinceRef.current = p.createdAt;
           }
-        } else {
-          patchJob(key, { status: "error", error: `Failed (${xhr.status})` });
+          patchJob(key, { progress: 100, status: "done" });
+        } catch {
+          patchJob(key, { status: "error", error: "Bad response" });
         }
-        resolve();
-      };
-      xhr.onerror = () => {
-        patchJob(key, { status: "error", error: "Network error" });
-        resolve();
-      };
-      xhr.send(form);
-    });
+      } else {
+        patchJob(key, { status: "error", error: `Failed (${xhr.status})` });
+      }
+      resolve();
+    };
+    xhr.onerror = () => {
+      patchJob(key, { status: "error", error: "Network error" });
+      resolve();
+    };
+    xhr.send(form);
+    return promise;
+  };
+
+  // When a batch settles (nothing left uploading) clear the finished jobs
+  // together, so the "N of M" count stays stable during the upload and the
+  // whole indicator retires at once. Errors persist so guests can see them.
+  useEffect(() => {
+    if (jobs.length === 0) return;
+    if (jobs.some((j) => j.status === "uploading")) return;
+    if (!jobs.some((j) => j.status === "done")) return;
+    const t = window.setTimeout(
+      () => setJobs((prev) => prev.filter((j) => j.status === "error")),
+      1500,
+    );
+    return () => window.clearTimeout(t);
+  }, [jobs]);
 
   // Lightbox keyboard navigation.
   useEffect(() => {
@@ -480,32 +494,41 @@ export default function GuestApp({ code, closed, initialPhotos }: Props) {
         </div>
       )}
 
-      {jobs.length > 0 && (
-        <div class="mt-4 space-y-2">
-          {jobs.map((job) => (
-            <div class="border border-sand/60 bg-parchment-light px-4 py-3">
-              <div class="flex justify-between text-xs text-taupe">
-                <span class="truncate pr-4">{job.name}</span>
-                <span>
-                  {job.status === "error"
-                    ? job.error
-                    : job.status === "done"
-                      ? "Done"
-                      : `${job.progress}%`}
-                </span>
-              </div>
-              {job.status !== "error" && (
+      {jobs.length > 0 && (() => {
+        const agg = aggregateProgress(jobs);
+        const total = agg.done + agg.uploading;
+        const errors = jobs.filter((j) => j.status === "error");
+        return (
+          <div class="mt-4 space-y-2">
+            {total > 0 && (
+              <div class="border border-sand/60 bg-parchment-light px-4 py-3">
+                <div class="flex justify-between text-xs text-taupe">
+                  <span>
+                    {agg.uploading > 0
+                      ? `Uploading… ${agg.done} of ${total}`
+                      : `Uploaded ${agg.done} ${total === 1 ? "photo" : "photos"}`}
+                  </span>
+                  <span>{agg.percent}%</span>
+                </div>
                 <div class="mt-2 h-0.5 bg-parchment-dark">
                   <div
                     class="h-0.5 bg-charcoal origin-left transition-transform duration-200 ease-out"
-                    style={{ transform: `scaleX(${job.progress / 100})` }}
+                    style={{ transform: `scaleX(${agg.percent / 100})` }}
                   />
                 </div>
-              )}
-            </div>
-          ))}
-        </div>
-      )}
+              </div>
+            )}
+            {errors.map((job) => (
+              <div class="border border-red-300/60 bg-red-50/60 px-4 py-3">
+                <div class="flex justify-between text-xs text-red-700">
+                  <span class="truncate pr-4">{job.name}</span>
+                  <span>{job.error}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        );
+      })()}
 
       <div class="mt-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between text-sm">
         <div class="flex items-center gap-5">
