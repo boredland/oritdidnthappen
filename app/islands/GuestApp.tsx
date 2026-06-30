@@ -551,7 +551,7 @@ export default function GuestApp({ code, closed, initialPhotos }: Props) {
           <input
             ref={fileInput}
             type="file"
-            accept="image/*"
+            accept="image/jpeg,image/png,image/heic,image/heif,image/webp,.jpg,.jpeg,.png,.heic,.heif,.webp"
             multiple
             class="hidden"
             onChange={(e) => {
