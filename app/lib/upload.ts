@@ -49,20 +49,22 @@ export interface UploadAggregate {
   errored: number;
   /** Byte-weighted completion (0–100) across all non-errored files. */
   percent: number;
+  /**
+   * How many files are effectively uploaded, deriving the count from byte
+   * progress rather than job status. In in-page mode this ≈ done; in
+   * background-fetch mode (where all jobs stay "uploading" until the batch
+   * settles) it's the only value that moves, so the "N of M" label tracks
+   * the bar instead of staying stuck at zero.
+   */
+  uploadedCount: number;
 }
-
-/**
- * Collapse per-file jobs into one batch indicator. Percent is weighted by file
- * size — a 10MB photo at 50% counts more than a 1MB photo at 50% — so the bar
- * tracks actual bytes transferred, not file count. Errored files are dropped
- * from the percent (they'll never complete) but reported separately.
- */
 export function aggregateProgress(jobs: ProgressJob[]): UploadAggregate {
   let done = 0;
   let uploading = 0;
   let errored = 0;
   let transferred = 0;
   let totalWeight = 0;
+  let fractionalDone = 0;
 
   for (const job of jobs) {
     if (job.status === "error") {
@@ -75,9 +77,14 @@ export function aggregateProgress(jobs: ProgressJob[]): UploadAggregate {
     const weight = job.size > 0 ? job.size : 1;
     totalWeight += weight;
     transferred += weight * (job.progress / 100);
+    // Each file contributes its progress fraction to the uploaded count, so
+    // the "N of M" label climbs with the bar instead of jumping only when a
+    // job's status flips to "done" (which, in background-fetch mode, happens
+    // for the whole batch at once).
+    fractionalDone += job.progress / 100;
   }
 
   const percent =
     totalWeight > 0 ? Math.round((transferred / totalWeight) * 100) : 0;
-  return { done, uploading, errored, percent };
+  return { done, uploading, errored, percent, uploadedCount: Math.floor(fractionalDone) };
 }

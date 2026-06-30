@@ -588,7 +588,7 @@ export default function GuestApp({ code, closed, initialPhotos }: Props) {
                 <div class="flex justify-between text-xs text-taupe">
                   <span>
                     {agg.uploading > 0
-                      ? `Uploading… ${agg.done} of ${total}`
+                      ? `Uploading… ${agg.uploadedCount} of ${total}`
                       : `Uploaded ${agg.done} ${total === 1 ? "photo" : "photos"}`}
                   </span>
                   <span>{agg.percent}%</span>

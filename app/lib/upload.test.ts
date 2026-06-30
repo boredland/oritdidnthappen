@@ -114,4 +114,46 @@ describe("aggregateProgress", () => {
     ]);
     expect(agg.percent).toBe(50);
   });
+
+  it("uploadedCount derives from byte progress, climbing before status flips", () => {
+    // Background-fetch scenario: all three stay "uploading" until the batch
+    // settles, but progress moves. The count must track the bar, not stay 0.
+    const agg = aggregateProgress([
+      job({ progress: 100, status: "uploading" }),
+      job({ progress: 100, status: "uploading" }),
+      job({ progress: 50, status: "uploading" }),
+    ]);
+    // 2 fully + 0.5 of the third = 2 → label shows "2 of 3" mid-batch.
+    expect(agg.uploadedCount).toBe(2);
+    expect(agg.uploading).toBe(3); // status hasn't flipped
+  });
+
+  it("uploadedCount rounds down fractional progress", () => {
+    const agg = aggregateProgress([
+      job({ progress: 60, status: "uploading" }),
+      job({ progress: 30, status: "uploading" }),
+    ]);
+    // 0.6 + 0.3 = 0.9 → floor → 0
+    expect(agg.uploadedCount).toBe(0);
+  });
+
+  it("uploadedCount equals total when everything is at 100%", () => {
+    const agg = aggregateProgress([
+      job({ progress: 100, status: "done" }),
+      job({ progress: 100, status: "done" }),
+      job({ progress: 100, status: "done" }),
+    ]);
+    expect(agg.uploadedCount).toBe(3);
+    expect(agg.done).toBe(3);
+  });
+
+  it("uploadedCount excludes errored files", () => {
+    const agg = aggregateProgress([
+      job({ progress: 100, status: "done" }),
+      job({ status: "error" }),
+      job({ progress: 50, status: "uploading" }),
+    ]);
+    // 1 + 0.5 = 1.5 → floor → 1 (error contributes nothing)
+    expect(agg.uploadedCount).toBe(1);
+  });
 });
