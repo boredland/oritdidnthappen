@@ -23,21 +23,11 @@ export default createRoute(async (c) => {
   const photoId = c.req.param("photoId");
   if (!photoId) return placeholder();
 
-  // The whole body is guarded: a thumbnail endpoint must never surface an
-  // uncaught 500, because Cloudflare caches error responses at the edge —
-  // one transient D1/token failure under concurrent load would otherwise
-  // poison the cache for that URL. Worst case is always the placeholder.
+  // Guarded so a transient D1/token failure returns the placeholder, never an
+  // uncaught 500 (Cloudflare caches edge errors, which would blank the tile).
+  // Browser caching via Cache-Control covers repeat views; edge caching, if
+  // needed, belongs in a Cache Rule — the manual Cache API poisoned entries.
   try {
-    // Edge cache: keyed by the full request URL (id + size + version). Only
-    // real, successful image responses are ever stored — never placeholders
-    // or errors.
-    const cacheKey = new Request(new URL(c.req.url).toString(), {
-      method: "GET",
-    });
-    const cache = (caches as unknown as { default: Cache }).default;
-    const hit = await cache.match(cacheKey);
-    if (hit) return hit;
-
     const photo = await getPhotoById(c.env.DB, photoId);
     if (!photo) return placeholder();
 
@@ -62,17 +52,12 @@ export default createRoute(async (c) => {
       return placeholder();
     }
 
-    // Buffer the bytes so the cached copy and the client copy are independent
-    // (no shared-stream race), then store and serve identical responses.
-    const bytes = await res.arrayBuffer();
-    const headers = {
-      "Content-Type": res.headers.get("Content-Type") ?? "image/jpeg",
-      "Cache-Control": "public, max-age=86400",
-    };
-    c.executionCtx.waitUntil(
-      cache.put(cacheKey, new Response(bytes, { headers })).catch(() => {}),
-    );
-    return new Response(bytes, { headers });
+    return new Response(res.body, {
+      headers: {
+        "Content-Type": res.headers.get("Content-Type") ?? "image/jpeg",
+        "Cache-Control": "public, max-age=86400",
+      },
+    });
   } catch {
     return placeholder();
   }
