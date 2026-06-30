@@ -35,6 +35,7 @@ export interface PhotoRow {
   size_bytes: number;
   created_at: number;
   taken_at: number | null;
+  content_hash: string | null;
 }
 
 export interface PhotoWithUser extends PhotoRow {
@@ -192,13 +193,14 @@ export async function addPhoto(
     mime_type: string;
     size_bytes: number;
     taken_at: number | null;
+    content_hash: string;
   },
 ): Promise<number> {
   const row = await db
     .prepare(
       `INSERT INTO photos
-         (id, event_id, guest_id, file_ref, filename, mime_type, size_bytes, taken_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+         (id, event_id, guest_id, file_ref, filename, mime_type, size_bytes, taken_at, content_hash)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
        RETURNING created_at`,
     )
     .bind(
@@ -210,9 +212,25 @@ export async function addPhoto(
       p.mime_type,
       p.size_bytes,
       p.taken_at,
+      p.content_hash,
     )
     .first<{ created_at: number }>();
   return row?.created_at ?? Math.floor(Date.now() / 1000);
+}
+
+/**
+ * Find a photo in this event by its content hash, for deduplication. Returns
+ * the existing row when an identical file is already in the gallery.
+ */
+export async function getPhotoByHash(
+  db: D1Database,
+  eventId: string,
+  contentHash: string,
+): Promise<PhotoRow | null> {
+  return db
+    .prepare(`SELECT * FROM photos WHERE event_id = ? AND content_hash = ?`)
+    .bind(eventId, contentHash)
+    .first<PhotoRow>();
 }
 
 export async function getPhotoById(

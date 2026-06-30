@@ -1,5 +1,5 @@
 import { createRoute } from "honox/factory";
-import { addPhoto, getEventByCode, getGuestBySession } from "../../../lib/db";
+import { addPhoto, getEventByCode, getGuestBySession, getPhotoByHash } from "../../../lib/db";
 import { generateId } from "../../../lib/crypto";
 import { ensureValidToken, getProvider } from "../../../lib/storage";
 import { notifyNewPhotos } from "../../../lib/notify";
@@ -76,6 +76,26 @@ export const POST = createRoute(async (c) => {
     }
     try {
       const buffer = await file.arrayBuffer();
+
+      // Dedup: hash the bytes and check if this exact file is already in the
+      // gallery. Bypasses the cloud upload entirely when it is — saves quota,
+      // bandwidth, and a duplicate row (the unique index is the backstop).
+      const hashBuffer = await crypto.subtle.digest("SHA-256", buffer);
+      const hashHex = Array.from(new Uint8Array(hashBuffer))
+        .map((b) => b.toString(16).padStart(2, "0"))
+        .join("");
+
+      const existing = await getPhotoByHash(c.env.DB, event.id, hashHex);
+      if (existing) {
+        uploaded.push({
+          id: existing.id,
+          username: guest.username,
+          createdAt: existing.created_at,
+          takenAt: existing.taken_at,
+        });
+        continue;
+      }
+
       const result = await provider.uploadFile(
         accessToken,
         event.folder_id,
@@ -96,6 +116,7 @@ export const POST = createRoute(async (c) => {
         mime_type: file.type,
         size_bytes: file.size,
         taken_at: takenAt,
+        content_hash: hashHex,
       });
       uploaded.push({ id, username: guest.username, createdAt, takenAt });
     } catch (e) {
