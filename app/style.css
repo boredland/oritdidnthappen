@@ -15,6 +15,9 @@
   --font-body: "DM Sans", "Helvetica Neue", sans-serif;
 
   --default-font-family: var(--font-body);
+
+  /* Strong UI easing (animations.dev) — built-in curves are too weak. */
+  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
 }
 
 /*
@@ -79,7 +82,7 @@ body {
   }
 }
 .pd-fade-in {
-  animation: pd-fade-in 0.5s ease-out both;
+  animation: pd-fade-in 0.3s cubic-bezier(0.23, 1, 0.32, 1) both;
 }
 
 /* Signature: the aperture mark irises open on first load — the camera
@@ -96,4 +99,48 @@ body {
 }
 .aperture-open {
   animation: aperture-open 0.8s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+/* Lightbox: backdrop fades, image irises up from its own center. Modals are
+ * origin-exempt (centered in viewport), so scale-from-center is correct. */
+@keyframes lightbox-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+@keyframes lightbox-img-in {
+  from {
+    opacity: 0;
+    transform: scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+.lightbox-in {
+  animation: lightbox-in 0.2s var(--ease-out) both;
+}
+.lightbox-img-in {
+  animation: lightbox-img-in 0.2s var(--ease-out) both;
+}
+
+/* Press feedback: any pressable element acknowledges the tap. Subtle scale,
+ * gated behind a fine pointer so it doesn't fight touch tap-highlight. */
+@media (hover: hover) and (pointer: fine) {
+  button:active,
+  a:active,
+  label:active,
+  [role="button"]:active {
+    transform: scale(0.98);
+  }
+}
+button,
+a,
+label[class*="cursor-pointer"],
+[role="button"] {
+  transition: transform 0.16s var(--ease-out);
 }

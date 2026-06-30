@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "hono/jsx";
 import { readTakenAt } from "../lib/exif";
+import { dampDrag, resolveSwipe } from "../lib/swipe";
 
 export interface PhotoItem {
   id: string;
@@ -174,6 +175,10 @@ export default function GuestApp({ code, closed, initialPhotos }: Props) {
   const [editingName, setEditingName] = useState(false);
   const [lightbox, setLightbox] = useState<number | null>(null);
   const [push, setPush] = useState<PushState>("idle");
+
+  // IDs present at mount: server-rendered tiles must not run the enter
+  // animation on hydration — only photos that arrive later fade in.
+  const [initialIds] = useState(() => new Set(initialPhotos.map((p) => p.id)));
 
   const fileInput = useRef<HTMLInputElement | null>(null);
   // Polling keys off upload time (createdAt), independent of the display sort,
@@ -492,8 +497,8 @@ export default function GuestApp({ code, closed, initialPhotos }: Props) {
               {job.status !== "error" && (
                 <div class="mt-2 h-0.5 bg-parchment-dark">
                   <div
-                    class="h-0.5 bg-charcoal transition-all"
-                    style={{ width: `${job.progress}%` }}
+                    class="h-0.5 bg-charcoal origin-left transition-transform duration-200 ease-out"
+                    style={{ transform: `scaleX(${job.progress / 100})` }}
                   />
                 </div>
               )}
@@ -566,7 +571,9 @@ export default function GuestApp({ code, closed, initialPhotos }: Props) {
           <button
             type="button"
             onClick={() => setLightbox(i)}
-            class="group relative block w-full aspect-square overflow-hidden bg-parchment-dark pd-fade-in"
+            class={`group relative block w-full aspect-square overflow-hidden bg-parchment-dark ${
+              initialIds.has(photo.id) ? "" : "pd-fade-in"
+            }`}
           >
             <img
               src={`/api/thumb/${photo.id}`}
@@ -678,23 +685,40 @@ function Lightbox({
   onClose: () => void;
   onShare: (photo: PhotoItem) => void;
 }) {
-  const [touchStartX, setTouchStartX] = useState<number | null>(null);
+  // Drag transform lives on this wrapper; the iris-up enter animation lives on
+  // the <img> (fill-mode:both would otherwise clobber an inline drag transform).
+  const dragRef = useRef<HTMLDivElement | null>(null);
+  const gesture = useRef<{ x: number; t: number } | null>(null);
+
+  const setTransform = (px: number, animate: boolean) => {
+    const el = dragRef.current;
+    if (!el) return;
+    el.style.transition = animate ? "transform 0.2s var(--ease-out)" : "none";
+    el.style.transform = px ? `translateX(${px}px)` : "";
+  };
 
   return (
     <div
       onClick={onClose}
-      onTouchStart={(e) => setTouchStartX(e.changedTouches[0].clientX)}
-      onTouchEnd={(e) => {
-        if (touchStartX === null) return;
-        const touchEndX = e.changedTouches[0].clientX;
-        const diff = touchStartX - touchEndX;
-        if (Math.abs(diff) > 40) {
-          if (diff > 0 && hasNext) onNext();
-          if (diff < 0 && hasPrev) onPrev();
-        }
-        setTouchStartX(null);
+      onTouchStart={(e) => {
+        gesture.current = { x: e.changedTouches[0].clientX, t: e.timeStamp };
       }}
-      class="fixed inset-0 z-50 bg-charcoal/95 flex flex-col items-center justify-center p-4"
+      onTouchMove={(e) => {
+        if (!gesture.current) return;
+        const dx = e.changedTouches[0].clientX - gesture.current.x;
+        setTransform(dampDrag(dx, hasPrev, hasNext), false);
+      }}
+      onTouchEnd={(e) => {
+        if (!gesture.current) return;
+        const dx = e.changedTouches[0].clientX - gesture.current.x;
+        const dt = e.timeStamp - gesture.current.t;
+        gesture.current = null;
+        const dir = resolveSwipe(dx, dt, hasPrev, hasNext);
+        if (dir === "next") onNext();
+        else if (dir === "prev") onPrev();
+        setTransform(0, true); // settle back; new photo lands centered
+      }}
+      class="lightbox-in fixed inset-0 z-50 bg-charcoal/95 flex flex-col items-center justify-center p-4"
     >
       <div class="absolute top-5 right-6 flex items-center gap-5">
         <button
@@ -730,12 +754,14 @@ function Lightbox({
           ‹
         </button>
       )}
-      <img
-        src={`/api/thumb/${photo.id}?size=full`}
-        alt={`Photo by ${photo.username}`}
-        onClick={(e) => e.stopPropagation()}
-        class="max-h-[85vh] max-w-full object-contain"
-      />
+      <div ref={dragRef} class="will-change-transform">
+        <img
+          src={`/api/thumb/${photo.id}?size=full`}
+          alt={`Photo by ${photo.username}`}
+          onClick={(e) => e.stopPropagation()}
+          class="lightbox-img-in max-h-[85vh] max-w-full object-contain"
+        />
+      </div>
       <p class="mt-4 text-ivory/70 text-sm tracking-wide">{photo.username}</p>
       {hasNext && (
         <button
