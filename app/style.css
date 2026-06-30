@@ -44,6 +44,16 @@ body {
   outline-offset: 2px;
 }
 
+/* Tailwind v4 Preflight sets buttons to cursor: default; restore the pointer
+ * affordance. Scoped to @layer base so cursor-* utilities still override it,
+ * and :not(:disabled) leaves disabled controls on the default cursor. */
+@layer base {
+  button:not(:disabled),
+  [role="button"]:not(:disabled) {
+    cursor: pointer;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,

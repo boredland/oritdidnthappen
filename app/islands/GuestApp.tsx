@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "hono/jsx";
 import { readTakenAt } from "../lib/exif";
 import { dampDrag, resolveSwipe } from "../lib/swipe";
+import { nextPhotoId, SLIDE_MS } from "../lib/slideshow";
 import {
   aggregateProgress,
   classifyFile,
@@ -195,6 +196,7 @@ export default function GuestApp({
   const [dragging, setDragging] = useState(false);
   const [editingName, setEditingName] = useState(false);
   const [lightbox, setLightbox] = useState<number | null>(null);
+  const [presenting, setPresenting] = useState(false);
   const [push, setPush] = useState<PushState>("idle");
   const [bgActive, setBgActive] = useState(false);
   // Background-fetch batch id → the job keys it owns, so a SW completion
@@ -585,6 +587,16 @@ export default function GuestApp({
     }
   }, [code, push]);
 
+  const startPresenting = useCallback(() => {
+    setPresenting(true);
+    document.documentElement.requestFullscreen?.().catch(() => {});
+  }, []);
+
+  const stopPresenting = useCallback(() => {
+    setPresenting(false);
+    if (document.fullscreenElement) document.exitFullscreen?.().catch(() => {});
+  }, []);
+
   return (
     <div>
       {!closed && (
@@ -721,6 +733,16 @@ export default function GuestApp({
               {sort === "taken" ? "By date taken" : "By date added"}
             </button>
           )}
+          {photos.length > 0 && (
+            <button
+              type="button"
+              onClick={startPresenting}
+              class="inline-flex items-center gap-1.5 text-charcoal-light hover:text-charcoal transition-colors"
+              title="Fullscreen slideshow"
+            >
+              <PresentIcon /> Present
+            </button>
+          )}
         </div>
         {session && (
           <UsernameControl
@@ -789,6 +811,9 @@ export default function GuestApp({
           onClose={() => setLightbox(null)}
           onShare={onSharePhoto}
         />
+      )}
+      {presenting && photos.length > 0 && (
+        <Slideshow photos={photos} onClose={stopPresenting} />
       )}
 
       {flash && (
@@ -975,6 +1000,140 @@ function Lightbox({
   );
 }
 
+// Fullscreen kiosk slideshow: steps through every photo/video in `photos`,
+// looping forever. Images (and non-autoplaying videos) hold SLIDE_MS; an
+// autoplaying video plays in full and advances on `ended`. Cursor is id-based
+// so the live, re-sorting `photos` array never makes the current slide jump.
+function Slideshow({
+  photos,
+  onClose,
+}: {
+  photos: PhotoItem[];
+  onClose: () => void;
+}) {
+  const [currentId, setCurrentId] = useState<string | null>(
+    photos[0]?.id ?? null,
+  );
+  const [autoplay, setAutoplay] = useState(true);
+  const [muted, setMuted] = useState(true);
+
+  // Mirrors keep `advance` stable so polling-driven re-renders don't reset it.
+  const photosRef = useRef(photos);
+  const currentIdRef = useRef(currentId);
+  const videoRef = useRef<HTMLVideoElement | null>(null);
+
+  const idx = photos.findIndex((p) => p.id === currentId);
+  const item = idx >= 0 ? photos[idx] : (photos[0] ?? null);
+
+  useEffect(() => {
+    photosRef.current = photos;
+  }, [photos]);
+  useEffect(() => {
+    currentIdRef.current = currentId;
+  }, [currentId]);
+
+  const advance = useCallback(() => {
+    setCurrentId(nextPhotoId(photosRef.current ?? [], currentIdRef.current));
+  }, []);
+
+  // Source of truth for the playing video's mute; runs before the scheduler on
+  // the same commit so `muted` is correct before `play()`.
+  useEffect(() => {
+    if (videoRef.current) videoRef.current.muted = muted;
+  }, [muted, item?.id]);
+
+  // Schedule the next slide. Images and non-autoplay videos hold SLIDE_MS; an
+  // autoplaying video advances on `ended`, with a timer fallback if play() is
+  // blocked so the kiosk never stalls.
+  useEffect(() => {
+    if (!item) return;
+    if (item.kind === "image" || !autoplay) {
+      const t = window.setTimeout(advance, SLIDE_MS);
+      return () => window.clearTimeout(t);
+    }
+    let fb: number | undefined;
+    const v = videoRef.current;
+    if (v) {
+      v.play().catch(() => {
+        fb = window.setTimeout(advance, SLIDE_MS);
+      });
+    } else {
+      fb = window.setTimeout(advance, SLIDE_MS);
+    }
+    return () => {
+      if (fb) window.clearTimeout(fb);
+    };
+  }, [item?.id, autoplay, advance]);
+
+  // Esc or leaving fullscreen (F11) closes the kiosk.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    const onFs = () => {
+      if (!document.fullscreenElement) onClose();
+    };
+    document.addEventListener("keydown", onKey);
+    document.addEventListener("fullscreenchange", onFs);
+    return () => {
+      document.removeEventListener("keydown", onKey);
+      document.removeEventListener("fullscreenchange", onFs);
+    };
+  }, [onClose]);
+
+  return (
+    <div class="fixed inset-0 z-[70] bg-charcoal flex items-center justify-center">
+      <div class="absolute top-5 inset-x-6 flex items-center justify-between">
+        <div class="flex items-center gap-5">
+          <button
+            type="button"
+            onClick={() => setAutoplay((a) => !a)}
+            class="text-ivory/60 hover:text-ivory text-xs uppercase tracking-widest"
+          >
+            {autoplay ? "Autoplay on" : "Autoplay off"}
+          </button>
+          <button
+            type="button"
+            onClick={() => setMuted((m) => !m)}
+            class="text-ivory/60 hover:text-ivory text-xs uppercase tracking-widest"
+          >
+            {muted ? "Muted" : "Sound on"}
+          </button>
+        </div>
+        <button
+          type="button"
+          onClick={onClose}
+          aria-label="Exit slideshow"
+          class="text-ivory/70 hover:text-ivory text-2xl leading-none"
+        >
+          ×
+        </button>
+      </div>
+      {item &&
+        (item.kind === "video" && autoplay ? (
+          <video
+            key={item.id}
+            ref={videoRef}
+            src={`/api/media/${item.id}`}
+            poster={`/api/thumb/${item.id}?size=full`}
+            playsInline
+            muted={muted}
+            onEnded={advance}
+            onError={() => window.setTimeout(advance, 400)}
+            class="max-h-screen max-w-full object-contain"
+          />
+        ) : (
+          <img
+            key={item.id}
+            src={`/api/thumb/${item.id}?size=full`}
+            alt={`Photo by ${item.username}`}
+            class="max-h-screen max-w-full object-contain"
+          />
+        ))}
+    </div>
+  );
+}
+
 function CameraIcon() {
   return (
     <svg
@@ -1068,6 +1227,27 @@ function SortIcon() {
     >
       <path
         d="M7 4 V20 M7 20 L3 16 M7 20 L11 16 M14 6 H21 M14 11 H19 M14 16 H17"
+        stroke="currentColor"
+        stroke-width="1.4"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+      />
+    </svg>
+  );
+}
+
+function PresentIcon() {
+  return (
+    <svg
+      width="16"
+      height="16"
+      viewBox="0 0 24 24"
+      fill="none"
+      class="inline-block"
+      aria-hidden="true"
+    >
+      <path
+        d="M4 9 V4 H9 M15 4 H20 V9 M20 15 V20 H15 M9 20 H4 V15"
         stroke="currentColor"
         stroke-width="1.4"
         stroke-linecap="round"
