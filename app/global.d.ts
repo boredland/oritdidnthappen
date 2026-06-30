@@ -33,4 +33,25 @@ export type Bindings = {
   VAPID_PUBLIC_KEY?: string;
   VAPID_PRIVATE_KEY?: string;
   VAPID_SUBJECT?: string;
+  TURNSTILE_SECRET_KEY: string;
+  TURNSTILE_SITE_KEY: string;
 };
+
+declare global {
+  interface Turnstile {
+    render(
+      container: HTMLElement,
+      options: {
+        sitekey: string;
+        action?: string;
+        size?: "normal" | "compact" | "invisible";
+        callback?: (token: string) => void;
+      },
+    ): void;
+    execute(container: HTMLElement): void;
+  }
+
+  interface Window {
+    turnstile?: Turnstile;
+  }
+}

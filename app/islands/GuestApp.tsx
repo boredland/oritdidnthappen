@@ -1,7 +1,13 @@
 import { useCallback, useEffect, useRef, useState } from "hono/jsx";
+import {
+  type BgUploadFile,
+  startBackgroundUpload,
+  supportsBackgroundUpload,
+} from "../lib/bgupload";
 import { readTakenAt } from "../lib/exif";
-import { dampDrag, resolveSwipe } from "../lib/swipe";
+import { generatePoster } from "../lib/poster";
 import { nextPhotoId, SLIDE_MS } from "../lib/slideshow";
+import { dampDrag, resolveSwipe } from "../lib/swipe";
 import {
   aggregateProgress,
   classifyFile,
@@ -9,12 +15,6 @@ import {
   UPLOAD_CONCURRENCY,
   VIDEO_ACCEPTED,
 } from "../lib/upload";
-import {
-  type BgUploadFile,
-  startBackgroundUpload,
-  supportsBackgroundUpload,
-} from "../lib/bgupload";
-import { generatePoster } from "../lib/poster";
 
 export interface PhotoItem {
   id: string;
@@ -119,7 +119,11 @@ async function nativeSharePhoto(
       if (e instanceof Error && e.name === "AbortError") return "shared";
     }
   }
-  return nativeShareUrl(`${location.origin}${path}`, `Photo by ${username}`, "");
+  return nativeShareUrl(
+    `${location.origin}${path}`,
+    `Photo by ${username}`,
+    "",
+  );
 }
 
 function urlBase64ToUint8Array(base64: string): Uint8Array<ArrayBuffer> {
@@ -315,9 +319,22 @@ export default function GuestApp({
         const key = `${file.name}-${stamp}-${i}`;
         const verdict = classifyFile(file, { videosEnabled, videoMaxBytes });
         if (!verdict.ok) {
-          addJob({ key, name: file.name, size: file.size, progress: 0, status: "error", error: verdict.reason });
+          addJob({
+            key,
+            name: file.name,
+            size: file.size,
+            progress: 0,
+            status: "error",
+            error: verdict.reason,
+          });
         } else {
-          addJob({ key, name: file.name, size: file.size, progress: 0, status: "uploading" });
+          addJob({
+            key,
+            name: file.name,
+            size: file.size,
+            progress: 0,
+            status: "uploading",
+          });
           pending.push({ key, file });
         }
       });
@@ -340,15 +357,19 @@ export default function GuestApp({
       // Background Fetch keeps uploading even if the PWA is closed
       // (Chromium/Android), but the SW can't thread a video's row id into a
       // follow-up poster request — so any batch with a video stays in-page.
-      const hasVideo = withMeta.some((p) => VIDEO_ACCEPTED.includes(p.file.type));
+      const hasVideo = withMeta.some((p) =>
+        VIDEO_ACCEPTED.includes(p.file.type),
+      );
       if (supportsBackgroundUpload() && !hasVideo) {
         const bgFiles: BgUploadFile[] = withMeta.map((p) => ({
           file: p.file,
           takenAt: p.takenAt,
         }));
+        const token = await getToken();
         const handle = await startBackgroundUpload(
           code,
           session.sessionToken,
+          token,
           bgFiles,
           (percent) => {
             for (const p of withMeta) patchJob(p.key, { progress: percent });
@@ -378,7 +399,11 @@ export default function GuestApp({
     if (!("serviceWorker" in navigator)) return;
     const onMsg = (e: MessageEvent) => {
       const data = e.data as { type?: string; id?: string } | null;
-      if (!data?.id || (data.type !== "bgupload-done" && data.type !== "bgupload-fail")) return;
+      if (
+        !data?.id ||
+        (data.type !== "bgupload-done" && data.type !== "bgupload-fail")
+      )
+        return;
       const keys = bgBatches.get(data.id);
       if (!keys) return;
       bgBatches.delete(data.id);
@@ -400,12 +425,15 @@ export default function GuestApp({
 
   const addJob = (job: UploadJob) => setJobs((prev) => [job, ...prev]);
   const patchJob = (key: string, patch: Partial<UploadJob>) =>
-    setJobs((prev) => prev.map((j) => (j.key === key ? { ...j, ...patch } : j)));
+    setJobs((prev) =>
+      prev.map((j) => (j.key === key ? { ...j, ...patch } : j)),
+    );
   // Best-effort poster attach for a video that just uploaded. Errors are
   // swallowed — a posterless video still shows (placeholder tile, native
   // first frame in the lightbox).
   const uploadPoster = async (photoId: string, poster: Blob) => {
     try {
+      const token = await getToken();
       await fetch(`/api/upload/${code}`, {
         method: "POST",
         headers: {
@@ -413,6 +441,7 @@ export default function GuestApp({
           "Content-Type": "image/jpeg",
           "X-Filename": "poster.jpg",
           "X-Poster-For": photoId,
+          "X-Turnstile-Token": token,
         },
         body: poster,
       });
@@ -420,7 +449,7 @@ export default function GuestApp({
       /* cosmetic — ignore */
     }
   };
-  const uploadOne = (
+  const uploadOne = async (
     file: File,
     key: string,
     takenAt: number | null,
@@ -428,11 +457,13 @@ export default function GuestApp({
   ) => {
     const { promise, resolve } = Promise.withResolvers<void>();
     const xhr = new XMLHttpRequest();
+    const token = await getToken();
     xhr.open("POST", `/api/upload/${code}`);
     xhr.setRequestHeader("Authorization", `Bearer ${session!.sessionToken}`);
     xhr.setRequestHeader("Content-Type", file.type);
     xhr.setRequestHeader("X-Filename", encodeURIComponent(file.name));
     xhr.setRequestHeader("X-Taken-At", takenAt != null ? String(takenAt) : "");
+    xhr.setRequestHeader("X-Turnstile-Token", token);
 
     xhr.upload.onprogress = (e) => {
       if (e.lengthComputable) {
@@ -491,7 +522,9 @@ export default function GuestApp({
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") setLightbox(null);
       if (e.key === "ArrowRight")
-        setLightbox((i) => (i === null ? null : Math.min(i + 1, photos.length - 1)));
+        setLightbox((i) =>
+          i === null ? null : Math.min(i + 1, photos.length - 1),
+        );
       if (e.key === "ArrowLeft")
         setLightbox((i) => (i === null ? null : Math.max(i - 1, 0)));
     };
@@ -579,7 +612,9 @@ export default function GuestApp({
         flashMsg(ok ? "Notifications off" : "Couldn't update");
       } else {
         setPush(ok ? "on" : "idle");
-        flashMsg(ok ? "You'll be notified of new photos" : "Notifications blocked");
+        flashMsg(
+          ok ? "You'll be notified of new photos" : "Notifications blocked",
+        );
       }
     } catch {
       setPush(wasOn ? "on" : "idle");
@@ -597,8 +632,35 @@ export default function GuestApp({
     if (document.fullscreenElement) document.exitFullscreen?.().catch(() => {});
   }, []);
 
+  const turnstileRef = useRef<HTMLDivElement | null>(null);
+  let tokenResolve: ((token: string) => void) | null = null;
+
+  useEffect(() => {
+    if (!turnstileRef.current || !window.turnstile) return;
+    window.turnstile.render(turnstileRef.current, {
+      sitekey: "0x4AAAAAADtcV63FbQKtpG08",
+      action: "upload",
+      size: "invisible",
+      callback: (token: string) => {
+        tokenResolve?.(token);
+        tokenResolve = null;
+      },
+    });
+  }, [session]);
+
+  const getToken = () =>
+    new Promise<string>((resolve) => {
+      tokenResolve = resolve;
+      if (window.turnstile && turnstileRef.current) {
+        window.turnstile.execute(turnstileRef.current);
+      } else {
+        resolve("");
+      }
+    });
+
   return (
     <div>
+      <div ref={turnstileRef} class="hidden" />
       {!closed && (
         <div
           id="upload-zone"
@@ -652,46 +714,47 @@ export default function GuestApp({
         </div>
       )}
 
-      {jobs.length > 0 && (() => {
-        const agg = aggregateProgress(jobs);
-        const total = agg.done + agg.uploading;
-        const errors = jobs.filter((j) => j.status === "error");
-        return (
-          <div class="mt-4 space-y-2">
-            {total > 0 && (
-              <div class="border border-sand/60 bg-parchment-light px-4 py-3">
-                <div class="flex justify-between text-xs text-taupe">
-                  <span>
-                    {agg.uploading > 0
-                      ? `Uploading… ${agg.uploadedCount} of ${total}`
-                      : `Uploaded ${agg.done} ${total === 1 ? "photo" : "photos"}`}
-                  </span>
-                  <span>{agg.percent}%</span>
+      {jobs.length > 0 &&
+        (() => {
+          const agg = aggregateProgress(jobs);
+          const total = agg.done + agg.uploading;
+          const errors = jobs.filter((j) => j.status === "error");
+          return (
+            <div class="mt-4 space-y-2">
+              {total > 0 && (
+                <div class="border border-sand/60 bg-parchment-light px-4 py-3">
+                  <div class="flex justify-between text-xs text-taupe">
+                    <span>
+                      {agg.uploading > 0
+                        ? `Uploading… ${agg.uploadedCount} of ${total}`
+                        : `Uploaded ${agg.done} ${total === 1 ? "photo" : "photos"}`}
+                    </span>
+                    <span>{agg.percent}%</span>
+                  </div>
+                  <div class="mt-2 h-0.5 bg-parchment-dark">
+                    <div
+                      class="h-0.5 bg-charcoal origin-left transition-transform duration-200 ease-out"
+                      style={{ transform: `scaleX(${agg.percent / 100})` }}
+                    />
+                  </div>
+                  {agg.uploading > 0 && !bgActive && (
+                    <p class="mt-2 text-[11px] text-taupe/80">
+                      Keep this screen open until uploading finishes.
+                    </p>
+                  )}
                 </div>
-                <div class="mt-2 h-0.5 bg-parchment-dark">
-                  <div
-                    class="h-0.5 bg-charcoal origin-left transition-transform duration-200 ease-out"
-                    style={{ transform: `scaleX(${agg.percent / 100})` }}
-                  />
+              )}
+              {errors.map((job) => (
+                <div class="border border-red-300/60 bg-red-50/60 px-4 py-3">
+                  <div class="flex justify-between text-xs text-red-700">
+                    <span class="truncate pr-4">{job.name}</span>
+                    <span>{job.error}</span>
+                  </div>
                 </div>
-                {agg.uploading > 0 && !bgActive && (
-                  <p class="mt-2 text-[11px] text-taupe/80">
-                    Keep this screen open until uploading finishes.
-                  </p>
-                )}
-              </div>
-            )}
-            {errors.map((job) => (
-              <div class="border border-red-300/60 bg-red-50/60 px-4 py-3">
-                <div class="flex justify-between text-xs text-red-700">
-                  <span class="truncate pr-4">{job.name}</span>
-                  <span>{job.error}</span>
-                </div>
-              </div>
-            ))}
-          </div>
-        );
-      })()}
+              ))}
+            </div>
+          );
+        })()}
 
       <div class="mt-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between text-sm">
         <div class="flex items-center gap-5">
@@ -719,13 +782,19 @@ export default function GuestApp({
               }`}
             >
               <BellIcon filled={push === "on"} />
-              {push === "working" ? "Updating…" : push === "on" ? "Notifying" : "Notify me"}
+              {push === "working"
+                ? "Updating…"
+                : push === "on"
+                  ? "Notifying"
+                  : "Notify me"}
             </button>
           )}
           {photos.length > 1 && (
             <button
               type="button"
-              onClick={() => setSort((s) => (s === "taken" ? "added" : "taken"))}
+              onClick={() =>
+                setSort((s) => (s === "taken" ? "added" : "taken"))
+              }
               class="inline-flex items-center gap-1.5 text-charcoal-light hover:text-charcoal transition-colors"
               title="Switch photo order"
             >
@@ -782,7 +851,11 @@ export default function GuestApp({
             {photo.kind === "video" && (
               <span class="pointer-events-none absolute inset-0 flex items-center justify-center">
                 <span class="flex h-12 w-12 items-center justify-center rounded-full bg-charcoal/55 text-ivory">
-                  <svg viewBox="0 0 24 24" fill="currentColor" class="h-5 w-5 translate-x-0.5">
+                  <svg
+                    viewBox="0 0 24 24"
+                    fill="currentColor"
+                    class="h-5 w-5 translate-x-0.5"
+                  >
                     <path d="M8 5v14l11-7z" />
                   </svg>
                 </span>
@@ -1158,7 +1231,13 @@ function CameraIcon() {
         stroke-width="1.1"
         stroke-linejoin="round"
       />
-      <circle cx="12" cy="13" r="3.4" stroke="currentColor" stroke-width="1.1" />
+      <circle
+        cx="12"
+        cy="13"
+        r="3.4"
+        stroke="currentColor"
+        stroke-width="1.1"
+      />
     </svg>
   );
 }

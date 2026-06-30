@@ -6,6 +6,10 @@ import { ensureValidToken, getProvider } from "../../../lib/storage";
 // host's cloud, forwarding the client's Range header so the lightbox <video>
 // can seek. The body is piped, never buffered — memory-flat at any size.
 export default createRoute(async (c) => {
+  const cache = (caches as any).default as Cache;
+  let response = await cache.match(c.req.raw);
+  if (response) return response;
+
   const photoId = c.req.param("photoId");
   if (!photoId) return c.notFound();
 
@@ -24,17 +28,15 @@ export default createRoute(async (c) => {
       c.req.header("Range") ?? null,
     );
     if (!res.ok || !res.body) {
-      // Gone from the host's cloud — self-heal the row so the gallery stops
-      // serving a dead tile, then 404.
       if (!res.ok && provider.isFileNotFound(res)) {
-        c.executionCtx.waitUntil(deletePhoto(c.env.DB, photo.event_id, photo.id));
+        c.executionCtx.waitUntil(
+          deletePhoto(c.env.DB, photo.event_id, photo.id),
+        );
       }
       return c.notFound();
     }
 
     const headers = new Headers({
-      // The provider's Content-Type is unreliable (Dropbox sends octet-stream);
-      // use the stored mime so the browser picks the right decoder.
       "Content-Type": photo.mime_type,
       "Accept-Ranges": "bytes",
       "Cache-Control": "public, max-age=86400",
@@ -44,7 +46,13 @@ export default createRoute(async (c) => {
     const contentLength = res.headers.get("Content-Length");
     if (contentLength) headers.set("Content-Length", contentLength);
 
-    return new Response(res.body, { status: res.status, headers });
+    response = new Response(res.body, { status: res.status, headers });
+
+    if (res.status === 200) {
+      c.executionCtx.waitUntil(cache.put(c.req.raw, response.clone()));
+    }
+
+    return response;
   } catch {
     return c.notFound();
   }

@@ -20,6 +20,10 @@ function placeholder(): Response {
 }
 
 export default createRoute(async (c) => {
+  const cache = (caches as any).default as Cache;
+  let response = await cache.match(c.req.raw);
+  if (response) return response;
+
   const photoId = c.req.param("photoId");
   if (!photoId) return placeholder();
   const photo = await getPhotoById(c.env.DB, photoId);
@@ -30,9 +34,6 @@ export default createRoute(async (c) => {
 
   const size = c.req.query("size") === "full" ? "full" : "grid";
 
-  // A video's own file_ref must never reach getThumbnail (Dropbox errors;
-  // Drive would stream the whole video). Thumbnail the client-made poster
-  // instead, and fall back to the placeholder when there isn't one.
   const isVideo = photo.mime_type.startsWith("video/");
   if (isVideo && !photo.poster_ref) return placeholder();
   const ref = isVideo ? photo.poster_ref! : photo.file_ref;
@@ -42,21 +43,23 @@ export default createRoute(async (c) => {
     const provider = getProvider(event.provider);
     const res = await provider.getThumbnail(accessToken, ref, size);
     if (!res.ok || !res.body) {
-      // The file is gone from the host's cloud — silently self-heal the DB
-      // so the gallery stops serving a broken thumbnail, then fall back to
-      // the placeholder. The next poll won't return this photo.
       if (!res.ok && provider.isFileNotFound(res)) {
-        c.executionCtx.waitUntil(deletePhoto(c.env.DB, photo.event_id, photo.id));
+        c.executionCtx.waitUntil(
+          deletePhoto(c.env.DB, photo.event_id, photo.id),
+        );
       }
       return placeholder();
     }
 
-    return new Response(res.body, {
+    response = new Response(res.body, {
       headers: {
         "Content-Type": res.headers.get("Content-Type") ?? "image/jpeg",
         "Cache-Control": "public, max-age=86400",
       },
     });
+
+    c.executionCtx.waitUntil(cache.put(c.req.raw, response.clone()));
+    return response;
   } catch {
     return placeholder();
   }

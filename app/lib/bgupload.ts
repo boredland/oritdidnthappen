@@ -76,6 +76,7 @@ export interface BgUploadHandle {
 export async function startBackgroundUpload(
   code: string,
   sessionToken: string,
+  turnstileToken: string,
   files: BgUploadFile[],
   onProgress?: (percent: number) => void,
 ): Promise<BgUploadHandle | null> {
@@ -89,6 +90,7 @@ export async function startBackgroundUpload(
         "Content-Type": file.type,
         "X-Filename": encodeURIComponent(file.name),
         "X-Taken-At": takenAt != null ? String(takenAt) : "",
+        ...(turnstileToken ? { "X-Turnstile-Token": turnstileToken } : {}),
       },
       body: file,
     });
