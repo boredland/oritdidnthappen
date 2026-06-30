@@ -150,16 +150,11 @@ function FormPage({
               <GoogleIcon />
               <span class="text-sm tracking-wide">Google Drive</span>
             </label>
-            <div
-              class="border border-sand/60 bg-parchment-light p-6 flex flex-col items-center gap-3 text-center opacity-50 cursor-not-allowed relative"
-              title="Dropbox support is coming soon"
-            >
+            <label class="cursor-pointer border border-sand bg-parchment-light p-6 flex flex-col items-center gap-3 text-center has-[:checked]:border-charcoal has-[:checked]:bg-parchment-dark has-[:focus-visible]:outline has-[:focus-visible]:outline-1 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-charcoal transition-colors">
+              <input type="radio" name="provider" value="dropbox" class="sr-only" />
               <DropboxIcon />
               <span class="text-sm tracking-wide">Dropbox</span>
-              <span class="absolute top-2 right-2 text-[10px] uppercase tracking-widest text-shagreen border border-sand px-1.5 py-0.5">
-                Soon
-              </span>
-            </div>
+            </label>
           </div>
         </div>
 

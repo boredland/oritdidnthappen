@@ -37,6 +37,10 @@ function hexToBytes(hex: string): Uint8Array<ArrayBuffer> {
   if (hex.length % 2 !== 0) {
     throw new Error("ENCRYPTION_KEY must be an even-length hex string");
   }
+  if (!/^[0-9a-fA-F]*$/.test(hex)) {
+    // parseInt would silently yield NaN -> 0, corrupting the key.
+    throw new Error("ENCRYPTION_KEY must contain only hex characters");
+  }
   const bytes = new Uint8Array(new ArrayBuffer(hex.length / 2));
   for (let i = 0; i < bytes.length; i++) {
     bytes[i] = parseInt(hex.slice(i * 2, i * 2 + 2), 16);

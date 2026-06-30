@@ -27,6 +27,7 @@ export default createRoute(async (c) => {
         id: p.id,
         username: p.username,
         createdAt: p.created_at,
+        takenAt: p.taken_at,
       })),
     });
   }
@@ -47,6 +48,7 @@ export default createRoute(async (c) => {
       id: p.id,
       username: p.username,
       createdAt: p.created_at,
+      takenAt: p.taken_at,
     })),
   });
 });

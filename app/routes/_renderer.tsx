@@ -79,6 +79,17 @@ export default jsxRenderer(({ children, title, description, image, noindex, json
               <a href="/terms" class="hover:text-charcoal underline-offset-2 hover:underline">
                 Terms
               </a>
+              <a href="/imprint" class="hover:text-charcoal underline-offset-2 hover:underline">
+                Imprint
+              </a>
+              <a
+                href="https://github.com/boredland/oritdidnthappen"
+                target="_blank"
+                rel="noopener noreferrer"
+                class="hover:text-charcoal underline-offset-2 hover:underline"
+              >
+                GitHub
+              </a>
             </p>
           </div>
         </footer>

@@ -16,6 +16,7 @@ interface Uploaded {
   id: string;
   username: string;
   createdAt: number;
+  takenAt: number | null;
 }
 interface UploadError {
   filename: string;
@@ -42,21 +43,29 @@ export const POST = createRoute(async (c) => {
   if (!event.folder_id) {
     return c.json({ error: "Storage not connected" }, 409);
   }
-
   const form = await c.req.parseBody({ all: true });
-  const raw = form["file"];
-  const files = (Array.isArray(raw) ? raw : [raw]).filter(
-    (f): f is File => f instanceof File,
+  const rawFiles = (() => {
+    const v = form["file"];
+    return Array.isArray(v) ? v : [v];
+  })();
+  // Optional EXIF capture time per file, sent by the client positionally
+  // aligned with the file fields (empty string when the photo had no EXIF).
+  const rawTaken = form["takenAt"];
+  const takenList = Array.isArray(rawTaken) ? rawTaken : [rawTaken];
+  // Keep files paired with their takenAt by zipping at the raw position,
+  // before any filtering shifts indices.
+  const entries = rawFiles.flatMap((f, i) =>
+    f instanceof File ? [{ file: f, takenAt: takenList[i] }] : [],
   );
-  if (files.length === 0) return c.json({ error: "No files" }, 400);
+  if (entries.length === 0) return c.json({ error: "No files" }, 400);
+
 
   const provider = getProvider(event.provider);
   const accessToken = await ensureValidToken(c.env.DB, c.env, event);
 
   const uploaded: Uploaded[] = [];
   const errors: UploadError[] = [];
-
-  for (const file of files) {
+  for (const { file, takenAt: takenField } of entries) {
     if (!ACCEPTED[file.type]) {
       errors.push({ filename: file.name, reason: "Unsupported type" });
       continue;
@@ -75,6 +84,9 @@ export const POST = createRoute(async (c) => {
         buffer,
       );
       const id = generateId(16);
+      const takenRaw = Number(takenField);
+      const takenAt =
+        Number.isFinite(takenRaw) && takenRaw > 0 ? Math.floor(takenRaw) : null;
       const createdAt = await addPhoto(c.env.DB, {
         id,
         event_id: event.id,
@@ -83,8 +95,9 @@ export const POST = createRoute(async (c) => {
         filename: file.name,
         mime_type: file.type,
         size_bytes: file.size,
+        taken_at: takenAt,
       });
-      uploaded.push({ id, username: guest.username, createdAt });
+      uploaded.push({ id, username: guest.username, createdAt, takenAt });
     } catch (e) {
       errors.push({
         filename: file.name,

@@ -16,6 +16,8 @@ export default function AdminControls({
   const [copied, setCopied] = useState(false);
   const [isClosed, setIsClosed] = useState(closed);
   const [busy, setBusy] = useState(false);
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   const copy = async () => {
     try {
@@ -36,6 +38,21 @@ export default function AdminControls({
     });
     setBusy(false);
     if (res.ok) setIsClosed(!isClosed);
+  };
+
+  const deleteEvent = async () => {
+    setDeleting(true);
+    const res = await fetch(`/api/event/${code}/delete`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ adminToken }),
+    });
+    if (res.ok) {
+      window.location.href = "/";
+      return;
+    }
+    setDeleting(false);
+    setConfirmingDelete(false);
   };
 
   return (
@@ -85,6 +102,52 @@ export default function AdminControls({
         >
           {isClosed ? "Reopen" : "Close event"}
         </button>
+      </div>
+
+      <div class="border-t border-red-300/50 pt-6">
+        {!confirmingDelete ? (
+          <div class="flex items-center justify-between">
+            <div>
+              <p class="text-sm text-charcoal">Delete this event</p>
+              <p class="text-xs text-shagreen">
+                Removes the gallery, guest list, and the uploaded photos from
+                your cloud. This can't be undone.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setConfirmingDelete(true)}
+              class="border border-red-300 px-6 py-3 text-xs uppercase tracking-widest text-red-700 hover:bg-red-900/40 hover:text-red-50 transition-colors"
+            >
+              Delete event
+            </button>
+          </div>
+        ) : (
+          <div class="border border-red-300 bg-red-900/10 p-5">
+            <p class="text-sm text-charcoal">
+              Permanently delete this event and remove its photos from your
+              cloud? Guests will lose access immediately.
+            </p>
+            <div class="flex items-center gap-4 mt-4">
+              <button
+                type="button"
+                onClick={deleteEvent}
+                disabled={deleting}
+                class="border border-red-300 px-6 py-3 text-xs uppercase tracking-widest text-red-50 bg-red-900/40 hover:bg-red-900/70 transition-colors disabled:opacity-50"
+              >
+                {deleting ? "Deleting…" : "Yes, delete it"}
+              </button>
+              <button
+                type="button"
+                onClick={() => setConfirmingDelete(false)}
+                disabled={deleting}
+                class="text-xs uppercase tracking-widest text-charcoal-light hover:text-charcoal transition-colors disabled:opacity-50"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

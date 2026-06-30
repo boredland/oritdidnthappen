@@ -18,6 +18,33 @@ const STEPS = [
   },
 ];
 
+const FAQ: { q: string; a: string }[] = [
+  {
+    q: "Who is this for?",
+    a: "Anyone hosting a gathering — weddings, birthdays, reunions, trips — who wants every guest's photos in one place without making people sign up for anything. The host brings their own cloud; guests just tap a link.",
+  },
+  {
+    q: "How does it work?",
+    a: "You create an event and connect your own Google Drive or Dropbox. We make one folder there and can only ever see that folder. You share the event link; guests pick a name and upload. Every photo lands straight in your cloud and shows up in a shared gallery everyone can see.",
+  },
+  {
+    q: "Do guests need an account or app?",
+    a: "No. No sign-up, no app, no password. A guest opens the link, optionally picks a username, and uploads from their phone or laptop. Their name is remembered on that device for next time.",
+  },
+  {
+    q: "Where do the photos actually go?",
+    a: "Into the host's own cloud storage — never onto our servers. We store only small event details (title, usernames, and a reference to each photo's location), and OAuth tokens are encrypted. If you delete the folder in your cloud, the photos are gone.",
+  },
+  {
+    q: "Can everyone see the photos as they're added?",
+    a: "Yes. The gallery updates on its own every few seconds, so photos appear while people keep the page open — no refresh needed. You can sort by when a photo was taken or when it was added, and opt in to a notification when new photos arrive.",
+  },
+  {
+    q: "Is it free?",
+    a: "Yes. You only use your own cloud storage, so there's nothing to pay us — and nothing for your guests either.",
+  },
+];
+
 export default createRoute((c) => {
   return c.render(
     <>
@@ -62,6 +89,41 @@ export default createRoute((c) => {
       </section>
 
       <section class="border-t border-sand/40">
+        <div class="max-w-2xl mx-auto px-6 py-24 md:py-32">
+          <h2 class="font-heading text-3xl md:text-4xl font-light tracking-wide text-center">
+            Questions
+          </h2>
+          <dl class="mt-12 space-y-10">
+            {FAQ.map((item) => (
+              <div class="border-t border-sand pt-6">
+                <dt class="font-heading text-xl md:text-2xl font-medium tracking-wide">
+                  {item.q}
+                </dt>
+                <dd class="text-charcoal-light mt-3 leading-relaxed">
+                  {item.a}
+                </dd>
+              </div>
+            ))}
+          </dl>
+
+          <div class="mt-12 border border-sand bg-parchment-light p-6 md:p-8">
+            <p class="text-xs uppercase tracking-widest text-charcoal-light">
+              On iPhone or iPad
+            </p>
+            <p class="mt-3 leading-relaxed text-charcoal-light">
+              To get notified of new photos on iOS, first add the event to your
+              Home Screen: tap the <span class="text-charcoal">Share</span>{" "}
+              button in Safari, choose{" "}
+              <span class="text-charcoal">Add to Home Screen</span>, then open
+              it from there and turn on notifications. Apple only allows web
+              push from a Home Screen app — in the normal Safari tab the option
+              won't appear.
+            </p>
+          </div>
+        </div>
+      </section>
+
+      <section class="border-t border-sand/40">
         <div class="max-w-2xl mx-auto px-6 py-24 md:py-32 text-center">
           <h2 class="font-heading text-3xl md:text-4xl font-light tracking-wide leading-snug text-balance">
             No accounts. No servers storing your photos. Just the link.
@@ -81,14 +143,26 @@ export default createRoute((c) => {
         "Collect photos from your guests straight into your own Google Drive or Dropbox. No app, no login — create an event, share one link, and watch the gallery fill up.",
       jsonLd: {
         "@context": "https://schema.org",
-        "@type": "WebApplication",
-        name: "or it didn't happen",
-        url: "https://oritdidnthappen.pics",
-        applicationCategory: "PhotographyApplication",
-        operatingSystem: "Any",
-        description:
-          "Event photo collection that uploads guests' photos directly into the host's own Google Drive or Dropbox. No login, no servers storing your photos.",
-        offers: { "@type": "Offer", price: "0", priceCurrency: "USD" },
+        "@graph": [
+          {
+            "@type": "WebApplication",
+            name: "or it didn't happen",
+            url: "https://oritdidnthappen.pics",
+            applicationCategory: "PhotographyApplication",
+            operatingSystem: "Any",
+            description:
+              "Event photo collection that uploads guests' photos directly into the host's own Google Drive or Dropbox. No login, no servers storing your photos.",
+            offers: { "@type": "Offer", price: "0", priceCurrency: "USD" },
+          },
+          {
+            "@type": "FAQPage",
+            mainEntity: FAQ.map((item) => ({
+              "@type": "Question",
+              name: item.q,
+              acceptedAnswer: { "@type": "Answer", text: item.a },
+            })),
+          },
+        ],
       },
     },
   );

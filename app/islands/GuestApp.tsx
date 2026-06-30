@@ -1,9 +1,29 @@
 import { useCallback, useEffect, useRef, useState } from "hono/jsx";
+import { readTakenAt } from "../lib/exif";
 
 export interface PhotoItem {
   id: string;
   username: string;
   createdAt: number;
+  takenAt: number | null;
+}
+
+export type SortMode = "added" | "taken";
+
+// Effective timestamp for a photo under a sort mode. "taken" falls back to
+// upload time when a photo has no EXIF date, so untagged photos still place.
+function sortKey(p: PhotoItem, mode: SortMode): number {
+  return mode === "taken" ? (p.takenAt ?? p.createdAt) : p.createdAt;
+}
+
+// Newest-first by the chosen key; id as a stable tiebreaker.
+function sortPhotos(list: PhotoItem[], mode: SortMode): PhotoItem[] {
+  return [...list].sort((a, b) => {
+    const diff = sortKey(b, mode) - sortKey(a, mode);
+    if (diff !== 0) return diff;
+    if (a.id === b.id) return 0;
+    return a.id < b.id ? 1 : -1;
+  });
 }
 
 interface Props {
@@ -145,7 +165,10 @@ async function unsubscribeFromEvent(code: string): Promise<boolean> {
 
 export default function GuestApp({ code, closed, initialPhotos }: Props) {
   const [session, setSession] = useState<Session | null>(null);
-  const [photos, setPhotos] = useState<PhotoItem[]>(initialPhotos);
+  const [sort, setSort] = useState<SortMode>("taken");
+  const [photos, setPhotos] = useState<PhotoItem[]>(() =>
+    sortPhotos(initialPhotos, "taken"),
+  );
   const [jobs, setJobs] = useState<UploadJob[]>([]);
   const [dragging, setDragging] = useState(false);
   const [editingName, setEditingName] = useState(false);
@@ -153,10 +176,18 @@ export default function GuestApp({ code, closed, initialPhotos }: Props) {
   const [push, setPush] = useState<PushState>("idle");
 
   const fileInput = useRef<HTMLInputElement | null>(null);
-  // Newest photo timestamp drives incremental polling.
+  // Polling keys off upload time (createdAt), independent of the display sort,
+  // so new uploads are always caught regardless of their EXIF date.
   const sinceRef = useRef<number>(
-    initialPhotos.length ? initialPhotos[0].createdAt : 0,
+    initialPhotos.reduce((max, p) => Math.max(max, p.createdAt), 0),
   );
+  // Mirror the current sort into a ref so the polling closure (deps [code,
+  // closed]) always merges with the live sort without re-subscribing.
+  const sortRef = useRef<SortMode>(sort);
+  useEffect(() => {
+    sortRef.current = sort;
+    setPhotos((prev) => sortPhotos(prev, sort));
+  }, [sort]);
 
   const storageKey = `pd_session_${code}`;
 
@@ -207,11 +238,15 @@ export default function GuestApp({ code, closed, initialPhotos }: Props) {
           closed: boolean;
         };
         if (data.photos.length) {
-          sinceRef.current = data.photos[data.photos.length - 1].createdAt;
+          sinceRef.current = data.photos.reduce(
+            (max, p) => Math.max(max, p.createdAt),
+            sinceRef.current ?? 0,
+          );
           setPhotos((prev) => {
             const seen = new Set(prev.map((p) => p.id));
             const fresh = data.photos.filter((p) => !seen.has(p.id));
-            return [...fresh.reverse(), ...prev];
+            if (fresh.length === 0) return prev;
+            return sortPhotos([...prev, ...fresh], sortRef.current ?? sort);
           });
         }
       } catch {
@@ -238,7 +273,9 @@ export default function GuestApp({ code, closed, initialPhotos }: Props) {
           continue;
         }
         addJob({ key, name: file.name, progress: 0, status: "uploading" });
-        await uploadOne(file, key);
+        // Read EXIF capture time client-side before upload (null when absent).
+        const takenAt = await readTakenAt(file);
+        await uploadOne(file, key, takenAt);
       }
     },
     [session, closed],
@@ -247,11 +284,11 @@ export default function GuestApp({ code, closed, initialPhotos }: Props) {
   const addJob = (job: UploadJob) => setJobs((prev) => [job, ...prev]);
   const patchJob = (key: string, patch: Partial<UploadJob>) =>
     setJobs((prev) => prev.map((j) => (j.key === key ? { ...j, ...patch } : j)));
-
-  const uploadOne = (file: File, key: string) =>
+  const uploadOne = (file: File, key: string, takenAt: number | null) =>
     new Promise<void>((resolve) => {
       const form = new FormData();
       form.append("file", file);
+      form.append("takenAt", takenAt != null ? String(takenAt) : "");
       const xhr = new XMLHttpRequest();
       xhr.open("POST", `/api/upload/${code}`);
       xhr.setRequestHeader("Authorization", `Bearer ${session!.sessionToken}`);
@@ -269,7 +306,11 @@ export default function GuestApp({ code, closed, initialPhotos }: Props) {
             };
             if (data.uploaded?.length) {
               const p = data.uploaded[0];
-              setPhotos((prev) => [p, ...prev]);
+              setPhotos((prev) =>
+                prev.some((x) => x.id === p.id)
+                  ? prev
+                  : sortPhotos([...prev, p], sortRef.current ?? "taken"),
+              );
               if (p.createdAt > (sinceRef.current ?? 0))
                 sinceRef.current = p.createdAt;
             }
@@ -488,6 +529,17 @@ export default function GuestApp({ code, closed, initialPhotos }: Props) {
             >
               <BellIcon filled={push === "on"} />
               {push === "on" ? "Notifying" : "Notify me"}
+            </button>
+          )}
+          {photos.length > 1 && (
+            <button
+              type="button"
+              onClick={() => setSort((s) => (s === "taken" ? "added" : "taken"))}
+              class="inline-flex items-center gap-1.5 text-charcoal-light hover:text-charcoal transition-colors"
+              title="Switch photo order"
+            >
+              <SortIcon />
+              {sort === "taken" ? "By date taken" : "By date added"}
             </button>
           )}
         </div>
@@ -764,6 +816,27 @@ function BellIcon({ filled }: { filled: boolean }) {
         d="M10 20 a2 2 0 0 0 4 0"
         stroke="currentColor"
         stroke-width="1.4"
+        stroke-linejoin="round"
+      />
+    </svg>
+  );
+}
+
+function SortIcon() {
+  return (
+    <svg
+      width="16"
+      height="16"
+      viewBox="0 0 24 24"
+      fill="none"
+      class="inline-block"
+      aria-hidden="true"
+    >
+      <path
+        d="M7 4 V20 M7 20 L3 16 M7 20 L11 16 M14 6 H21 M14 11 H19 M14 16 H17"
+        stroke="currentColor"
+        stroke-width="1.4"
+        stroke-linecap="round"
         stroke-linejoin="round"
       />
     </svg>

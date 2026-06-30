@@ -34,6 +34,7 @@ export interface PhotoRow {
   mime_type: string;
   size_bytes: number;
   created_at: number;
+  taken_at: number | null;
 }
 
 export interface PhotoWithUser extends PhotoRow {
@@ -190,13 +191,14 @@ export async function addPhoto(
     filename: string;
     mime_type: string;
     size_bytes: number;
+    taken_at: number | null;
   },
 ): Promise<number> {
   const row = await db
     .prepare(
       `INSERT INTO photos
-         (id, event_id, guest_id, file_ref, filename, mime_type, size_bytes)
-       VALUES (?, ?, ?, ?, ?, ?, ?)
+         (id, event_id, guest_id, file_ref, filename, mime_type, size_bytes, taken_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)
        RETURNING created_at`,
     )
     .bind(
@@ -207,6 +209,7 @@ export async function addPhoto(
       p.filename,
       p.mime_type,
       p.size_bytes,
+      p.taken_at,
     )
     .first<{ created_at: number }>();
   return row?.created_at ?? Math.floor(Date.now() / 1000);
@@ -266,7 +269,11 @@ export async function getPhotosByEvent(
   return results ?? [];
 }
 
-/** Photos created strictly after `since` (unix seconds), oldest-first. */
+/**
+ * Photos created at or after `since` (unix seconds), oldest-first. Inclusive
+ * (`>=`) so a same-second upload by another guest at the cursor isn't missed;
+ * the client dedups by id, so re-returning the cursor row is harmless.
+ */
 export async function getPhotosSince(
   db: D1Database,
   eventId: string,
@@ -276,7 +283,7 @@ export async function getPhotosSince(
     .prepare(
       `SELECT p.*, g.username
        FROM photos p JOIN guests g ON g.id = p.guest_id
-       WHERE p.event_id = ? AND p.created_at > ?
+       WHERE p.event_id = ? AND p.created_at >= ?
        ORDER BY p.created_at ASC, p.id ASC
        LIMIT 200`,
     )
@@ -393,4 +400,32 @@ export async function getEventCodesByEndpoint(
     .bind(endpoint)
     .all<{ event_id: string }>();
   return (results ?? []).map((r) => r.event_id);
+}
+
+/** All cloud file references for an event's photos (for best-effort cleanup). */
+export async function getEventFileRefs(
+  db: D1Database,
+  eventId: string,
+): Promise<string[]> {
+  const { results } = await db
+    .prepare(`SELECT file_ref FROM photos WHERE event_id = ?`)
+    .bind(eventId)
+    .all<{ file_ref: string }>();
+  return (results ?? []).map((r) => r.file_ref);
+}
+
+/**
+ * Delete an event and every row that references it. D1 has no FK cascade, so
+ * children are removed first, then the event — atomically via a batch.
+ */
+export async function deleteEvent(
+  db: D1Database,
+  eventId: string,
+): Promise<void> {
+  await db.batch([
+    db.prepare(`DELETE FROM photos WHERE event_id = ?`).bind(eventId),
+    db.prepare(`DELETE FROM push_subscriptions WHERE event_id = ?`).bind(eventId),
+    db.prepare(`DELETE FROM guests WHERE event_id = ?`).bind(eventId),
+    db.prepare(`DELETE FROM events WHERE id = ?`).bind(eventId),
+  ]);
 }
