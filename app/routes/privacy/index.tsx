@@ -28,9 +28,10 @@ export default createRoute((c) => {
             "quiet-otter").
           </li>
           <li>
-            For each uploaded photo: its filename, type, size, and a reference
-            to where it lives in the host's cloud — <strong>never the photo
-            itself</strong>.
+            For each uploaded photo: its filename, type, size, and a storage
+            path pointing to the file in the host's cloud (
+            <em>not</em> its location on a map) —
+            <strong>never the photo itself</strong>.
           </li>
         </ul>
       </div>

@@ -34,7 +34,7 @@ const FAQ: { q: string; a: string }[] = [
   },
   {
     q: "Where do the photos actually go?",
-    a: "Into the host's own cloud storage — never onto our servers. We store only small event details (title, usernames, and a reference to each photo's location), and OAuth tokens are encrypted. If you delete the folder in your cloud, the photos are gone.",
+    a: "Into the host's own cloud storage — never onto our servers. We store only small event details (title, usernames, and a storage path for each photo pointing to where it lives in the host's cloud — not the photo itself), and OAuth tokens are encrypted. If you delete the folder in your cloud, the photos are gone.",
   },
   {
     q: "Can everyone see the photos as they're added?",
