@@ -2,6 +2,11 @@ import { useCallback, useEffect, useRef, useState } from "hono/jsx";
 import { readTakenAt } from "../lib/exif";
 import { dampDrag, resolveSwipe } from "../lib/swipe";
 import { aggregateProgress, mapPool, UPLOAD_CONCURRENCY } from "../lib/upload";
+import {
+  type BgUploadFile,
+  startBackgroundUpload,
+  supportsBackgroundUpload,
+} from "../lib/bgupload";
 
 export interface PhotoItem {
   id: string;
@@ -177,6 +182,10 @@ export default function GuestApp({ code, closed, initialPhotos }: Props) {
   const [editingName, setEditingName] = useState(false);
   const [lightbox, setLightbox] = useState<number | null>(null);
   const [push, setPush] = useState<PushState>("idle");
+  const [bgActive, setBgActive] = useState(false);
+  // Background-fetch batch id → the job keys it owns, so a SW completion
+  // message finalizes exactly those jobs. Stable across renders.
+  const [bgBatches] = useState(() => new Map<string, string[]>());
 
   // IDs present at mount: server-rendered tiles must not run the enter
   // animation on hydration — only photos that arrive later fade in.
@@ -265,29 +274,103 @@ export default function GuestApp({ code, closed, initialPhotos }: Props) {
     return () => window.clearInterval(timer);
   }, [code, closed]);
 
+  // Warn before navigating away mid-upload: uploads run on this page, so
+  // closing it aborts anything in flight (unless Background Fetch took over).
+  const uploading = jobs.some((j) => j.status === "uploading");
+  useEffect(() => {
+    if (!uploading) return;
+    const warn = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      e.returnValue = "";
+    };
+    window.addEventListener("beforeunload", warn);
+    return () => window.removeEventListener("beforeunload", warn);
+  }, [uploading]);
+
   const handleFiles = useCallback(
     async (files: FileList | File[]) => {
       if (!session || closed) return;
       const list = Array.from(files);
       const stamp = Date.now();
-      await mapPool(list, UPLOAD_CONCURRENCY, async (file, i) => {
+
+      // Validate up front; only sound files become upload jobs.
+      const pending: { key: string; file: File }[] = [];
+      list.forEach((file, i) => {
         const key = `${file.name}-${stamp}-${i}`;
         if (!ACCEPTED.includes(file.type)) {
           addJob({ key, name: file.name, size: file.size, progress: 0, status: "error", error: "Unsupported type" });
-          return;
-        }
-        if (file.size > MAX_BYTES) {
+        } else if (file.size > MAX_BYTES) {
           addJob({ key, name: file.name, size: file.size, progress: 0, status: "error", error: "Too large (max 25MB)" });
+        } else {
+          addJob({ key, name: file.name, size: file.size, progress: 0, status: "uploading" });
+          pending.push({ key, file });
+        }
+      });
+      if (pending.length === 0) return;
+
+      // EXIF capture time, read client-side before upload (null when absent).
+      const withMeta = await Promise.all(
+        pending.map(async (p) => ({ ...p, takenAt: await readTakenAt(p.file) })),
+      );
+
+      // Background Fetch path: keeps uploading even if the PWA is closed
+      // (Chromium/Android). Falls through to the in-page pool otherwise.
+      if (supportsBackgroundUpload()) {
+        const bgFiles: BgUploadFile[] = withMeta.map((p) => ({
+          file: p.file,
+          takenAt: p.takenAt,
+        }));
+        const handle = await startBackgroundUpload(
+          code,
+          session.sessionToken,
+          bgFiles,
+          (percent) => {
+            for (const p of withMeta) patchJob(p.key, { progress: percent });
+          },
+        );
+        if (handle) {
+          bgBatches.set(
+            handle.id,
+            withMeta.map((p) => p.key),
+          );
+          setBgActive(true);
           return;
         }
-        addJob({ key, name: file.name, size: file.size, progress: 0, status: "uploading" });
-        // Read EXIF capture time client-side before upload (null when absent).
-        const takenAt = await readTakenAt(file);
-        await uploadOne(file, key, takenAt);
+        // Registration failed (quota / permission) — fall back in-page.
+      }
+
+      await mapPool(withMeta, UPLOAD_CONCURRENCY, async (p) => {
+        await uploadOne(p.file, p.key, p.takenAt);
       });
     },
-    [session, closed],
+    [session, closed, code],
   );
+
+  // Finalize a background batch when the service worker reports it done/failed
+  // (fires whether or not the page stayed open).
+  useEffect(() => {
+    if (!("serviceWorker" in navigator)) return;
+    const onMsg = (e: MessageEvent) => {
+      const data = e.data as { type?: string; id?: string } | null;
+      if (!data?.id || (data.type !== "bgupload-done" && data.type !== "bgupload-fail")) return;
+      const keys = bgBatches.get(data.id);
+      if (!keys) return;
+      bgBatches.delete(data.id);
+      const failed = data.type === "bgupload-fail";
+      setJobs((prev) =>
+        prev.map((j) =>
+          keys.includes(j.key)
+            ? failed
+              ? { ...j, status: "error", error: "Upload failed" }
+              : { ...j, status: "done", progress: 100 }
+            : j,
+        ),
+      );
+      if (bgBatches.size === 0) setBgActive(false);
+    };
+    navigator.serviceWorker.addEventListener("message", onMsg);
+    return () => navigator.serviceWorker.removeEventListener("message", onMsg);
+  }, []);
 
   const addJob = (job: UploadJob) => setJobs((prev) => [job, ...prev]);
   const patchJob = (key: string, patch: Partial<UploadJob>) =>
@@ -516,6 +599,11 @@ export default function GuestApp({ code, closed, initialPhotos }: Props) {
                     style={{ transform: `scaleX(${agg.percent / 100})` }}
                   />
                 </div>
+                {agg.uploading > 0 && !bgActive && (
+                  <p class="mt-2 text-[11px] text-taupe/80">
+                    Keep this screen open until uploading finishes.
+                  </p>
+                )}
               </div>
             )}
             {errors.map((job) => (
