@@ -8,7 +8,11 @@ import {
   setPhotoPoster,
 } from "../../../lib/db";
 import { generateId } from "../../../lib/crypto";
-import { ensureValidToken, getProvider } from "../../../lib/storage";
+import {
+  ensureValidToken,
+  getProvider,
+  hashStreamToHex,
+} from "../../../lib/storage";
 import {
   IMAGE_ACCEPTED,
   IMAGE_MAX_BYTES,
@@ -114,11 +118,11 @@ export const POST = createRoute(async (c) => {
 
   try {
     // Stream the body to the provider and hash it in lockstep: one tee branch
-    // feeds the streaming hash sink, the other the upload. Neither buffers the
-    // file in the isolate — memory stays flat regardless of size.
+    // feeds the hash, the other the upload. In production neither buffers the
+    // file in the isolate (DigestStream); the dev Node runtime buffers the
+    // hash branch only (see hashStreamToHex).
     const [toHash, toUpload] = body.tee();
-    const ds = new DigestStream("SHA-256");
-    const hashP = toHash.pipeTo(ds).then(() => ds.digest);
+    const hashP = hashStreamToHex(toHash);
     const uploadP = provider.streamUpload(
       accessToken,
       event.folder_id,
@@ -126,10 +130,10 @@ export const POST = createRoute(async (c) => {
       mime,
       toUpload,
     );
-    const [{ fileRef }, digest] = await Promise.all([uploadP, hashP]);
-    const hashHex = Array.from(new Uint8Array(digest))
-      .map((b) => b.toString(16).padStart(2, "0"))
-      .join("");
+    const [{ fileRef }, { hex: hashHex, bytes }] = await Promise.all([
+      uploadP,
+      hashP,
+    ]);
 
     // Dedup: a streamed upload commits the bytes before the hash is known, so
     // a duplicate is caught after upload — delete the redundant cloud copy
@@ -160,7 +164,7 @@ export const POST = createRoute(async (c) => {
       file_ref: fileRef,
       filename,
       mime_type: mime,
-      size_bytes: Number(ds.bytesWritten),
+      size_bytes: bytes,
       taken_at: takenAt,
       content_hash: hashHex,
       poster_ref: null,

@@ -34,6 +34,52 @@ export type ThumbSize = "grid" | "full";
  */
 export type StreamRequestInit = RequestInit & { duplex: "half" };
 
+/**
+ * Hash a byte stream to a SHA-256 hex string, returning the byte count too.
+ *
+ * Production (workerd) exposes `crypto.DigestStream` — a WritableStream hash
+ * sink that never retains the data, so the upload stays memory-flat. The vite
+ * dev server runs the worker under Node, which has no `DigestStream`, so there
+ * we buffer the stream and fall back to `crypto.subtle.digest`. Identical hash
+ * either way, so per-event dedup is consistent across dev and prod.
+ */
+export async function hashStreamToHex(
+  stream: ReadableStream<Uint8Array>,
+): Promise<{ hex: string; bytes: number }> {
+  const maybe = crypto as unknown as { DigestStream?: typeof DigestStream };
+  let digest: ArrayBuffer;
+  let bytes: number;
+  if (typeof maybe.DigestStream === "function") {
+    const ds = new maybe.DigestStream("SHA-256");
+    await stream.pipeTo(ds);
+    digest = await ds.digest;
+    bytes = Number(ds.bytesWritten);
+  } else {
+    const reader = stream.getReader();
+    const chunks: Uint8Array[] = [];
+    bytes = 0;
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      if (value) {
+        chunks.push(value);
+        bytes += value.length;
+      }
+    }
+    const buf = new Uint8Array(bytes);
+    let offset = 0;
+    for (const chunk of chunks) {
+      buf.set(chunk, offset);
+      offset += chunk.length;
+    }
+    digest = await crypto.subtle.digest("SHA-256", buf);
+  }
+  const hex = Array.from(new Uint8Array(digest))
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("");
+  return { hex, bytes };
+}
+
 export interface StorageProvider {
   id: Provider;
   label: string;
