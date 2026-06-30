@@ -678,9 +678,22 @@ function Lightbox({
   onClose: () => void;
   onShare: (photo: PhotoItem) => void;
 }) {
+  const [touchStartX, setTouchStartX] = useState<number | null>(null);
+
   return (
     <div
       onClick={onClose}
+      onTouchStart={(e) => setTouchStartX(e.changedTouches[0].clientX)}
+      onTouchEnd={(e) => {
+        if (touchStartX === null) return;
+        const touchEndX = e.changedTouches[0].clientX;
+        const diff = touchStartX - touchEndX;
+        if (Math.abs(diff) > 40) {
+          if (diff > 0 && hasNext) onNext();
+          if (diff < 0 && hasPrev) onPrev();
+        }
+        setTouchStartX(null);
+      }}
       class="fixed inset-0 z-50 bg-charcoal/95 flex flex-col items-center justify-center p-4"
     >
       <div class="absolute top-5 right-6 flex items-center gap-5">

@@ -1,6 +1,7 @@
 import { createRoute } from "honox/factory";
 import AdminControls from "../../../islands/AdminControls";
 import AdminGallery from "../../../islands/AdminGallery";
+import GalleryTracker from "../../../islands/GalleryTracker";
 import {
   countGuests,
   countPhotos,
@@ -47,6 +48,12 @@ export default createRoute(async (c) => {
 
   return c.render(
     <section class="max-w-3xl mx-auto px-6 py-12 md:py-16">
+      <GalleryTracker
+        code={event.id}
+        title={event.title}
+        role="admin"
+        url={`/event/${event.id}/admin?token=${token}`}
+      />
       {isNew && (
         <div class="border border-charcoal bg-parchment-dark px-5 py-4 mb-10 text-sm">
           Your event is ready. Save this page — the link in the address bar is

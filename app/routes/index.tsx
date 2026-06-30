@@ -1,5 +1,6 @@
 import { createRoute } from "honox/factory";
 
+import RecentGalleries from "../islands/RecentGalleries";
 const STEPS = [
   {
     n: "01",
@@ -72,6 +73,7 @@ export default createRoute((c) => {
         </div>
       </section>
 
+      <RecentGalleries />
       <section class="max-w-5xl mx-auto px-6 py-24 md:py-32">
         <div class="grid md:grid-cols-3 gap-16 md:gap-12">
           {STEPS.map((s) => (
