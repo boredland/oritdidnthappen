@@ -14,6 +14,10 @@ export default jsxRenderer(({ children, title, description }) => {
         <meta property="og:title" content={pageTitle} />
         <meta property="og:description" content={desc} />
         <meta property="og:type" content="website" />
+        <meta property="og:image" content="/logo-512.png" />
+        <link rel="icon" href="/logo.svg" type="image/svg+xml" />
+        <link rel="icon" href="/favicon-32.png" sizes="32x32" type="image/png" />
+        <link rel="apple-touch-icon" href="/logo-512.png" />
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link
           rel="preconnect"
@@ -32,9 +36,12 @@ export default jsxRenderer(({ children, title, description }) => {
           <div class="max-w-5xl mx-auto px-6 py-6">
             <a
               href="/"
-              class="font-heading text-2xl tracking-[0.3em] uppercase text-charcoal"
+              class="inline-flex items-center gap-3 text-charcoal"
             >
-              or it didn't happen
+              <img src="/logo.svg" alt="" width="28" height="28" />
+              <span class="font-heading text-2xl tracking-[0.3em] uppercase">
+                or it didn't happen
+              </span>
             </a>
           </div>
         </header>
