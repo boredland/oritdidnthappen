@@ -173,9 +173,10 @@ function GoogleIcon() {
   return (
     <svg width="28" height="28" viewBox="0 0 24 24" fill="none" aria-hidden="true">
       <path
-        d="M7.71 3.5 1.15 15l3.27 5.5h6.55L7.71 15h13.14L17.42 9.5 14.26 4 7.71 3.5Z"
+        d="M12 10l-6 10l-3 -5l6 -10l3 5 M9 15h12l-3 5h-12 M15 15l-6 -10h6l6 10h-6"
         stroke="#3A3632"
         stroke-width="1.2"
+        stroke-linecap="round"
         stroke-linejoin="round"
       />
     </svg>
