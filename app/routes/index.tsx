@@ -59,7 +59,7 @@ export default createRoute((c) => {
             class="aperture-open mx-auto mb-10 opacity-90"
           />
           <h1 class="font-heading font-light tracking-wide text-5xl md:text-7xl leading-[1.05] text-balance">
-            Share the moment. Together.
+            Everyone's pics. Or it didn't happen.
           </h1>
           <p class="mt-8 text-lg text-charcoal-light">
             Your photos. Your cloud. One link.
