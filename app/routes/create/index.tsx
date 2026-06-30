@@ -1,3 +1,4 @@
+import { useState } from "hono/jsx";
 import { createRoute } from "honox/factory";
 import { createEvent, type Provider } from "../../lib/db";
 import { generateId } from "../../lib/crypto";
@@ -56,7 +57,6 @@ export default createRoute((c) => {
       "Create a photo-collection event in a minute — connect your own Google Drive or Dropbox and share one link. Guests upload straight to your cloud, no login.",
   });
 });
-
 function FormPage({
   error,
   title = "",
@@ -68,6 +68,18 @@ function FormPage({
   email?: string;
   folder?: string;
 }) {
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const handleSubmit = (e: Event) => {
+    if (isSubmitting) {
+      e.preventDefault();
+      return;
+    }
+    setIsSubmitting(true);
+    // Let the browser submit natively — the server redirects to the OAuth
+    // provider, so no JS fetch is needed.
+  };
+
   return (
     <section class="max-w-lg mx-auto px-6 py-20 md:py-28">
       <h1 class="font-heading text-4xl md:text-5xl font-light tracking-wide text-center">
@@ -83,7 +95,7 @@ function FormPage({
         </p>
       ) : null}
 
-      <form method="post" class="mt-12 space-y-8">
+      <form method="post" class="mt-12 space-y-8" onSubmit={handleSubmit}>
         <div>
           <label class="block text-xs uppercase tracking-widest text-charcoal-light mb-2">
             Event name
@@ -160,9 +172,10 @@ function FormPage({
 
         <button
           type="submit"
-          class="w-full border border-charcoal px-8 py-4 text-sm tracking-widest uppercase hover:bg-charcoal hover:text-ivory transition-colors"
+          disabled={isSubmitting}
+          class="w-full border border-charcoal px-8 py-4 text-sm tracking-widest uppercase hover:bg-charcoal hover:text-ivory transition-colors disabled:opacity-50"
         >
-          Connect storage
+          {isSubmitting ? "Connecting…" : "Connect storage"}
         </button>
       </form>
     </section>
