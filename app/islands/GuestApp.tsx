@@ -783,7 +783,7 @@ export default function GuestApp({
               type="file"
               accept={`image/jpeg,image/png,image/heic,image/heif,image/webp,.jpg,.jpeg,.png,.heic,.heif,.webp${videosEnabled ? ",video/mp4,video/quicktime,video/webm,.mp4,.mov,.webm" : ""}`}
               multiple
-              class="hidden"
+              class="sr-only"
               onChange={(e) => {
                 const t = e.target as HTMLInputElement;
                 if (t.files) void handleFiles(t.files);
@@ -805,7 +805,7 @@ export default function GuestApp({
             type="file"
             accept="image/*"
             capture="environment"
-            class="hidden"
+            class="sr-only"
             onChange={(e) => {
               const t = e.target as HTMLInputElement;
               if (t.files) void handleFiles(t.files);
