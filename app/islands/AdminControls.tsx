@@ -1,4 +1,8 @@
 import { useState } from "hono/jsx";
+import { VIDEO_CEILING_BYTES, VIDEO_DEFAULT_BYTES } from "../lib/upload";
+
+const VIDEO_DEFAULT_MB = VIDEO_DEFAULT_BYTES / (1024 * 1024);
+const VIDEO_MAX_MB = VIDEO_CEILING_BYTES / (1024 * 1024);
 
 interface Props {
   code: string;
@@ -23,7 +27,7 @@ export default function AdminControls({
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [videosOn, setVideosOn] = useState(videosEnabled);
-  const [maxMb, setMaxMb] = useState(videoMaxMb ?? 25);
+  const [maxMb, setMaxMb] = useState(videoMaxMb ?? VIDEO_DEFAULT_MB);
   const [videoBusy, setVideoBusy] = useState(false);
 
   const copy = async () => {
@@ -175,14 +179,14 @@ export default function AdminControls({
             <input
               type="number"
               min={1}
-              max={90}
+              max={VIDEO_MAX_MB}
               value={maxMb}
               disabled={videoBusy}
               onChange={(e) => {
                 const v = Math.round(
                   Number((e.target as HTMLInputElement).value),
                 );
-                const clamped = Math.min(Math.max(1, v || 1), 90);
+                const clamped = Math.min(Math.max(1, v || 1), VIDEO_MAX_MB);
                 setMaxMb(clamped);
                 void saveVideoSettings(true, clamped);
               }}

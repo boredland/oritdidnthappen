@@ -12,6 +12,7 @@ import {
   mapPool,
   UPLOAD_CONCURRENCY,
   VIDEO_ACCEPTED,
+  VIDEO_DEFAULT_BYTES,
 } from "../lib/upload";
 
 export interface PhotoItem {
@@ -805,7 +806,7 @@ export default function GuestApp({
             <p class="mt-1 text-xs text-shagreen">
               JPEG, PNG, HEIC, WebP · up to 25MB
               {videosEnabled &&
-                ` · video up to ${videoMaxBytes ? Math.round(videoMaxBytes / (1024 * 1024)) : 25}MB`}
+                ` · video up to ${videoMaxBytes ? Math.round(videoMaxBytes / (1024 * 1024)) : VIDEO_DEFAULT_BYTES / (1024 * 1024)}MB`}
             </p>
           </div>
           <input

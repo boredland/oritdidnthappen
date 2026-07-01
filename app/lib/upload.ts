@@ -106,10 +106,10 @@ export const IMAGE_ACCEPTED = [
 export const VIDEO_ACCEPTED = ["video/mp4", "video/quicktime", "video/webm"];
 
 export const IMAGE_MAX_BYTES = 25 * 1024 * 1024;
-/** Hard ceiling for any video; the per-event limit is clamped to this. Keeps us under the 100 MB Workers request-body limit. */
-export const VIDEO_CEILING_BYTES = 90 * 1024 * 1024;
+/** Hard ceiling for any video; the per-event limit is clamped to this. Kept under the 100 MB Cloudflare request-body limit (Free/Pro) so an allowed upload never 413s at the edge. */
+export const VIDEO_CEILING_BYTES = 96 * 1024 * 1024;
 /** Per-event video limit when the host enables video without setting one. */
-export const VIDEO_DEFAULT_BYTES = 25 * 1024 * 1024;
+export const VIDEO_DEFAULT_BYTES = 64 * 1024 * 1024;
 
 export type FileKind = "image" | "video";
 export type Classification =

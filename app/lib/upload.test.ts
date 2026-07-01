@@ -4,6 +4,7 @@ import {
   classifyFile,
   mapPool,
   type ProgressJob,
+  VIDEO_CEILING_BYTES,
 } from "./upload";
 
 describe("mapPool", () => {
@@ -214,16 +215,16 @@ describe("classifyFile", () => {
     }
   });
 
-  it("falls back to the 90MB ceiling when no per-event limit is set", () => {
+  it("falls back to VIDEO_CEILING_BYTES when no per-event limit is set", () => {
     const enabledNoLimit = { videosEnabled: true, videoMaxBytes: null };
     expect(
-      classifyFile(f("video/mp4", 80 * 1024 * 1024), enabledNoLimit),
+      classifyFile(f("video/mp4", VIDEO_CEILING_BYTES), enabledNoLimit),
     ).toEqual({
       ok: true,
       kind: "video",
     });
     expect(
-      classifyFile(f("video/mp4", 91 * 1024 * 1024), enabledNoLimit),
+      classifyFile(f("video/mp4", VIDEO_CEILING_BYTES + 1), enabledNoLimit),
     ).toEqual({
       ok: false,
       reason: "Too large",
