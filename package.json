@@ -15,7 +15,8 @@
   },
   "dependencies": {
     "hono": "^4.12.27",
-    "honox": "^0.1.56"
+    "honox": "^0.1.56",
+    "qr": "^0.6.0"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.5.1",

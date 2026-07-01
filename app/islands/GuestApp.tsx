@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "hono/jsx";
+import encodeQR from "qr";
 import { readTakenAt } from "../lib/exif";
 import { thumbUrl } from "../lib/media-url";
 import { generatePoster } from "../lib/poster";
@@ -202,6 +203,7 @@ export default function GuestApp({
   const [presenting, setPresenting] = useState(false);
   const [presentFromId, setPresentFromId] = useState<string | null>(null);
   const [push, setPush] = useState<PushState>("idle");
+  const [showQr, setShowQr] = useState(false);
 
   // IDs present at mount: server-rendered tiles must not run the enter
   // animation on hydration — only photos that arrive later fade in.
@@ -857,6 +859,15 @@ export default function GuestApp({
               <ShareIcon /> Share
             </button>
           )}
+          {!closed && (
+            <button
+              type="button"
+              onClick={() => setShowQr(true)}
+              class="inline-flex items-center gap-1.5 text-charcoal-light hover:text-charcoal transition-colors"
+            >
+              <QrIcon /> QR code
+            </button>
+          )}
           {push !== "unsupported" && !closed && (
             <button
               type="button"
@@ -982,6 +993,13 @@ export default function GuestApp({
           photos={photos}
           startId={presentFromId}
           onClose={stopPresenting}
+        />
+      )}
+
+      {showQr && (
+        <QrModal
+          url={`${location.origin}/event/${code}`}
+          onClose={() => setShowQr(false)}
         />
       )}
 
@@ -1423,6 +1441,85 @@ function VideoIcon({
         stroke-linejoin="round"
       />
     </svg>
+  );
+}
+
+function QrIcon() {
+  return (
+    <svg
+      width="16"
+      height="16"
+      viewBox="0 0 24 24"
+      fill="none"
+      aria-hidden="true"
+    >
+      <rect
+        x="3"
+        y="3"
+        width="7"
+        height="7"
+        stroke="currentColor"
+        stroke-width="1.3"
+      />
+      <rect
+        x="14"
+        y="3"
+        width="7"
+        height="7"
+        stroke="currentColor"
+        stroke-width="1.3"
+      />
+      <rect
+        x="3"
+        y="14"
+        width="7"
+        height="7"
+        stroke="currentColor"
+        stroke-width="1.3"
+      />
+      <path
+        d="M14 14h3v3M20 14v3M14 20h3M20 20h1"
+        stroke="currentColor"
+        stroke-width="1.3"
+      />
+    </svg>
+  );
+}
+
+function QrModal({ url, onClose }: { url: string; onClose: () => void }) {
+  // encodeQR returns SVG markup; islands render client-side so `location`
+  // is always defined here. High ECC keeps it scannable on a projector or
+  // print even with a logo-sized chunk obscured.
+  const svg = encodeQR(url, "svg", { ecc: "high", border: 1 });
+  return (
+    <div
+      role="dialog"
+      aria-label="Event QR code"
+      onClick={onClose}
+      onKeyDown={(e: KeyboardEvent) => {
+        if (e.key === "Escape") onClose();
+      }}
+      class="lightbox-in fixed inset-0 z-50 bg-charcoal/95 flex flex-col items-center justify-center p-6"
+    >
+      <button
+        type="button"
+        onClick={onClose}
+        class="absolute top-5 right-6 text-ivory/70 hover:text-ivory text-2xl leading-none"
+        aria-label="Close"
+      >
+        ×
+      </button>
+      <button
+        type="button"
+        aria-label="Scan to join this event"
+        onClick={(e) => e.stopPropagation()}
+        class="appearance-none border-0 p-4 bg-ivory"
+        dangerouslySetInnerHTML={{ __html: svg }}
+      />
+      <p class="mt-5 text-ivory/80 text-sm tracking-widest uppercase">
+        Scan to join
+      </p>
+    </div>
   );
 }
 
