@@ -7,6 +7,7 @@ import {
 import { readTakenAt } from "../lib/exif";
 import { thumbUrl } from "../lib/media-url";
 import { generatePoster } from "../lib/poster";
+import { prefetchMedia } from "../lib/prefetch";
 import { nextPhotoId, SLIDE_MS } from "../lib/slideshow";
 import { dampDrag, resolveSwipe } from "../lib/swipe";
 import {
@@ -204,6 +205,7 @@ export default function GuestApp({
   const [editingName, setEditingName] = useState(false);
   const [lightbox, setLightbox] = useState<number | null>(null);
   const [presenting, setPresenting] = useState(false);
+  const [presentFromId, setPresentFromId] = useState<string | null>(null);
   const [push, setPush] = useState<PushState>("idle");
   const [bgActive, setBgActive] = useState(false);
   // Background-fetch batch id → the job keys it owns, so a SW completion
@@ -535,6 +537,13 @@ export default function GuestApp({
     return () => window.removeEventListener("keydown", onKey);
   }, [lightbox, photos.length]);
 
+  // Warm both lightbox neighbors so arrow/swipe navigation paints instantly.
+  useEffect(() => {
+    if (lightbox === null) return;
+    prefetchMedia(photos[lightbox + 1]);
+    prefetchMedia(photos[lightbox - 1]);
+  }, [lightbox, photos]);
+
   const [flash, setFlash] = useState<string | null>(null);
   const flashMsg = (msg: string) => {
     setFlash(msg);
@@ -625,13 +634,15 @@ export default function GuestApp({
     }
   }, [code, push]);
 
-  const startPresenting = useCallback(() => {
+  const startPresenting = useCallback((fromId?: string) => {
+    setPresentFromId(fromId ?? null);
     setPresenting(true);
     document.documentElement.requestFullscreen?.().catch(() => {});
   }, []);
 
   const stopPresenting = useCallback(() => {
     setPresenting(false);
+    setPresentFromId(null);
     if (document.fullscreenElement) document.exitFullscreen?.().catch(() => {});
   }, []);
 
@@ -866,7 +877,7 @@ export default function GuestApp({
           {photos.length > 0 && (
             <button
               type="button"
-              onClick={startPresenting}
+              onClick={() => startPresenting()}
               class="inline-flex items-center gap-1.5 text-charcoal-light hover:text-charcoal transition-colors"
               title="Fullscreen slideshow"
             >
@@ -944,10 +955,18 @@ export default function GuestApp({
           onNext={() => setLightbox((i) => (i === null ? null : i + 1))}
           onClose={() => setLightbox(null)}
           onShare={onSharePhoto}
+          onPresent={(id) => {
+            setLightbox(null);
+            startPresenting(id);
+          }}
         />
       )}
       {presenting && photos.length > 0 && (
-        <Slideshow photos={photos} onClose={stopPresenting} />
+        <Slideshow
+          photos={photos}
+          startId={presentFromId}
+          onClose={stopPresenting}
+        />
       )}
 
       {flash && (
@@ -1018,6 +1037,7 @@ function Lightbox({
   onNext,
   onClose,
   onShare,
+  onPresent,
 }: {
   photo: PhotoItem;
   hasPrev: boolean;
@@ -1026,6 +1046,7 @@ function Lightbox({
   onNext: () => void;
   onClose: () => void;
   onShare: (photo: PhotoItem) => void;
+  onPresent: (id: string) => void;
 }) {
   // Drag transform lives on this wrapper; the iris-up enter animation lives on
   // the <img> (fill-mode:both would otherwise clobber an inline drag transform).
@@ -1063,6 +1084,18 @@ function Lightbox({
       class="lightbox-in fixed inset-0 z-50 bg-charcoal/95 flex flex-col items-center justify-center p-4"
     >
       <div class="absolute top-5 right-6 flex items-center gap-5">
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            onPresent(photo.id);
+          }}
+          class="text-ivory/70 hover:text-ivory"
+          aria-label="Start slideshow from here"
+          title="Start slideshow from here"
+        >
+          <PresentIcon />
+        </button>
         <button
           type="button"
           onClick={(e) => {
@@ -1140,13 +1173,15 @@ function Lightbox({
 // so the live, re-sorting `photos` array never makes the current slide jump.
 function Slideshow({
   photos,
+  startId,
   onClose,
 }: {
   photos: PhotoItem[];
+  startId?: string | null;
   onClose: () => void;
 }) {
   const [currentId, setCurrentId] = useState<string | null>(
-    photos[0]?.id ?? null,
+    startId ?? photos[0]?.id ?? null,
   );
   const [autoplay, setAutoplay] = useState(true);
   const [muted, setMuted] = useState(true);
@@ -1158,6 +1193,10 @@ function Slideshow({
 
   const idx = photos.findIndex((p) => p.id === currentId);
   const item = idx >= 0 ? photos[idx] : (photos[0] ?? null);
+  const nextId = item ? nextPhotoId(photos, item.id) : null;
+  const nextItem = nextId
+    ? (photos.find((p) => p.id === nextId) ?? null)
+    : null;
 
   useEffect(() => {
     photosRef.current = photos;
@@ -1175,6 +1214,11 @@ function Slideshow({
   useEffect(() => {
     if (videoRef.current) videoRef.current.muted = muted;
   }, [muted, item?.id]);
+
+  // Warm the next slide's renderable frame so it paints without a flash.
+  useEffect(() => {
+    prefetchMedia(nextItem);
+  }, [nextItem?.id]);
 
   // Schedule the next slide. Images and non-autoplay videos hold SLIDE_MS; an
   // autoplaying video advances on `ended`, with a timer fallback if play() is
@@ -1243,6 +1287,13 @@ function Slideshow({
           ×
         </button>
       </div>
+      {autoplay && nextItem?.kind === "video" && (
+        <link
+          key={nextItem.id}
+          rel="prefetch"
+          href={`/api/media/${nextItem.id}`}
+        />
+      )}
       {item &&
         (item.kind === "video" && autoplay ? (
           <video
