@@ -732,26 +732,25 @@ export default function GuestApp({
           ts.execute(id);
           return;
         }
-        // Wait for the async api.js to load (≈9s budget).
-        if (++attempts > 60) {
+        // Wait for the async api.js to load (≈18s budget on mobile).
+        if (++attempts > 120) {
           done("");
           return;
         }
         window.setTimeout(run, 150);
       };
       run();
-      window.setTimeout(() => done(""), 12000);
+      window.setTimeout(() => done(""), 25000);
     });
   };
 
   return (
     <div>
       <div ref={turnstileRef} />
-      {!closed && (
+      {!closed && session && (
         <div class="max-w-2xl mx-auto">
           {/* biome-ignore lint/a11y/useSemanticElements: contains <input> — can't be <button> */}
           <div
-            id="upload-zone"
             role="button"
             tabIndex={0}
             aria-label="Add photos — drop files here or activate to browse"
@@ -818,6 +817,22 @@ export default function GuestApp({
             class="mt-3 flex w-full items-center justify-center gap-2 border border-charcoal bg-charcoal py-3 text-sm uppercase tracking-widest text-ivory transition-colors hover:bg-charcoal-light"
           >
             <CameraIcon size={18} class="text-ivory" /> Take a photo
+          </button>
+        </div>
+      )}
+
+      {!closed && !session && (
+        <div class="max-w-2xl mx-auto border border-sand bg-parchment-light p-10 text-center">
+          <p class="font-heading text-2xl font-light tracking-wide text-charcoal">
+            Welcome
+          </p>
+          <p class="text-charcoal-light mt-2 text-sm">Verifying…</p>
+          <button
+            type="button"
+            onClick={() => void registerGuest()}
+            class="mt-6 border border-charcoal px-6 py-2 text-sm uppercase tracking-widest hover:bg-charcoal hover:text-ivory transition-colors"
+          >
+            Join this event
           </button>
         </div>
       )}
