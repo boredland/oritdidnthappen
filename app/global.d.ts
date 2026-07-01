@@ -50,6 +50,7 @@ declare global {
         callback?: (token: string) => void;
         "error-callback"?: () => void;
         "expired-callback"?: () => void;
+        "timeout-callback"?: () => void;
       },
     ): string;
     execute(container: HTMLElement | string): void;

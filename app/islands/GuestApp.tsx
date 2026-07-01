@@ -644,7 +644,7 @@ export default function GuestApp({
     widgetIdRef.current = ts.render(turnstileRef.current, {
       sitekey: turnstileSiteKey,
       action: "register",
-      size: "invisible",
+      size: "flexible",
       execution: "execute",
       callback: (token: string) => {
         tokenResolveRef.current?.(token);
@@ -653,6 +653,13 @@ export default function GuestApp({
       "error-callback": () => {
         tokenResolveRef.current?.("");
         tokenResolveRef.current = null;
+      },
+      "timeout-callback": () => {
+        tokenResolveRef.current?.("");
+        tokenResolveRef.current = null;
+      },
+      "expired-callback": () => {
+        if (widgetIdRef.current) window.turnstile?.reset(widgetIdRef.current);
       },
     });
     return widgetIdRef.current;
@@ -678,22 +685,26 @@ export default function GuestApp({
           ts.execute(id);
           return;
         }
-        // Wait for the async api.js to load (≈11s budget, just under the
-        // 12s hard timeout below so a slow script surfaces the retry).
-        if (++attempts > 72) {
+        // Wait for the async api.js to load (~15s budget). Once the widget
+        // executes, Turnstile's own error/timeout callbacks resolve done("") —
+        // no blanket timeout here, so a human completing an interactive
+        // challenge is never cut off mid-solve.
+        if (++attempts > 100) {
           done("");
           return;
         }
         window.setTimeout(run, 150);
       };
       run();
-      window.setTimeout(() => done(""), 12000);
     });
   };
 
   return (
     <div>
-      <div ref={turnstileRef} />
+      {/* Always mounted so both first-time registration and username changes
+          (both hit the Turnstile-gated /api/register) can render a challenge.
+          Empty and invisible until Turnstile draws an interactive challenge. */}
+      <div ref={turnstileRef} class="flex justify-center empty:hidden" />
       {!closed && session && (
         <div class="max-w-2xl mx-auto">
           {/* biome-ignore lint/a11y/useSemanticElements: contains <input> — can't be <button> */}
@@ -797,11 +808,14 @@ export default function GuestApp({
             Welcome
           </p>
           {regState === "working" ? (
-            <p class="text-charcoal-light mt-2 text-sm">Verifying…</p>
+            <p class="text-charcoal-light mt-2 text-sm">
+              Verifying you're human…
+            </p>
           ) : (
             <>
               <p class="text-charcoal-light mt-2 text-sm">
-                We couldn't verify your browser. Please try again.
+                We couldn't verify your browser. Complete the check below, or
+                try again.
               </p>
               <button
                 type="button"
