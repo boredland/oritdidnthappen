@@ -69,7 +69,7 @@ export default function AdminGallery({
   if (photos.length === 0) {
     return (
       <p class="mt-4 text-shagreen text-sm">
-        No photos yet. Share the guest link to start collecting.
+        No photos yet. Share the participant link to start collecting.
       </p>
     );
   }

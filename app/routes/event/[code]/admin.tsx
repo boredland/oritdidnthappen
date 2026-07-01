@@ -40,11 +40,14 @@ export default createRoute(async (c) => {
   ]);
 
   const shareUrl = `${c.env.BASE_URL}/event/${event.id}`;
-  const created = new Date(event.created_at * 1000).toLocaleDateString("en-US", {
-    year: "numeric",
-    month: "long",
-    day: "numeric",
-  });
+  const created = new Date(event.created_at * 1000).toLocaleDateString(
+    "en-US",
+    {
+      year: "numeric",
+      month: "long",
+      day: "numeric",
+    },
+  );
 
   return c.render(
     <section class="max-w-3xl mx-auto px-6 py-12 md:py-16">
@@ -72,7 +75,7 @@ export default createRoute(async (c) => {
 
       <div class="grid grid-cols-2 gap-px bg-sand/40 border border-sand/40 mb-10">
         <Stat label="Photos" value={photoCount} />
-        <Stat label="Guests" value={guestCount} />
+        <Stat label="Participants" value={guestCount} />
       </div>
 
       <AdminControls
@@ -81,7 +84,11 @@ export default createRoute(async (c) => {
         shareUrl={shareUrl}
         closed={closed}
         videosEnabled={event.videos_enabled === 1}
-        videoMaxMb={event.video_max_bytes ? Math.round(event.video_max_bytes / (1024 * 1024)) : null}
+        videoMaxMb={
+          event.video_max_bytes
+            ? Math.round(event.video_max_bytes / (1024 * 1024))
+            : null
+        }
       />
 
       {event.folder_url && (
@@ -104,7 +111,10 @@ export default createRoute(async (c) => {
         <AdminGallery
           code={event.id}
           adminToken={event.admin_token}
-          initialPhotos={photos.map((p) => ({ id: p.id, username: p.username }))}
+          initialPhotos={photos.map((p) => ({
+            id: p.id,
+            username: p.username,
+          }))}
           initialCover={event.cover_photo_id}
         />
       </div>

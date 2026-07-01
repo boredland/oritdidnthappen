@@ -13,10 +13,10 @@ export default createRoute((c) => {
       <div>
         <H2>Use it for good</H2>
         <p class="mt-3">
-          Only upload photos you have the right to share, and only to events
-          you were invited to. Don't upload illegal content, or anything that
+          Only upload photos you have the right to share, and only to events you
+          were invited to. Don't upload illegal content, or anything that
           violates others' privacy or rights. Hosts are responsible for the
-          events they create and the guests they invite.
+          events they create and the people they invite.
         </p>
       </div>
 

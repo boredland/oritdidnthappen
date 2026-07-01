@@ -92,7 +92,7 @@ export default function AdminControls({
     <div class="space-y-8">
       <div>
         <p class="text-xs uppercase tracking-widest text-taupe mb-2">
-          Guest link
+          Participant link
         </p>
         <div class="flex items-stretch border border-sand bg-parchment-light">
           <code class="flex-1 px-4 py-3 text-sm text-charcoal overflow-x-auto whitespace-nowrap">
@@ -124,8 +124,8 @@ export default function AdminControls({
           </p>
           <p class="text-xs text-shagreen">
             {isClosed
-              ? "Guests can view but not upload."
-              : "Guests can upload photos."}
+              ? "Participants can view but not upload."
+              : "Participants can upload photos."}
           </p>
         </div>
         <button
@@ -152,8 +152,8 @@ export default function AdminControls({
             </p>
             <p class="text-xs text-shagreen">
               {videosOn
-                ? "Guests can upload videos up to the limit below."
-                : "Guests can upload photos only."}
+                ? "Participants can upload videos up to the limit below."
+                : "Participants can upload photos only."}
             </p>
           </div>
           <button
@@ -199,8 +199,8 @@ export default function AdminControls({
             <div>
               <p class="text-sm text-charcoal">Delete this event</p>
               <p class="text-xs text-shagreen">
-                Removes the gallery, guest list, and the uploaded photos from
-                your cloud. This can't be undone.
+                Removes the gallery, participant list, and the uploaded photos
+                from your cloud. This can't be undone.
               </p>
             </div>
             <button
@@ -215,7 +215,7 @@ export default function AdminControls({
           <div class="border border-red-300 bg-red-900/10 p-5">
             <p class="text-sm text-charcoal">
               Permanently delete this event and remove its photos from your
-              cloud? Guests will lose access immediately.
+              cloud? Participants will lose access immediately.
             </p>
             <div class="flex items-center gap-4 mt-4">
               <button

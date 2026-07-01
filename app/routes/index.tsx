@@ -11,39 +11,47 @@ const STEPS = [
   {
     n: "02",
     title: "Share",
-    body: "Send one link to your guests. No apps, no accounts, no friction.",
+    body: "Send one link to everyone. No apps, no accounts, no friction.",
   },
   {
     n: "03",
     title: "Collect",
-    body: "Every photo lands in your own cloud. Everyone sees the gallery fill up.",
+    body: "Every photo and video lands in your own cloud. Everyone watches the gallery fill up — or plays it back as a fullscreen slideshow.",
   },
 ];
 
 const FAQ: { q: string; a: string }[] = [
   {
     q: "Who is this for?",
-    a: "Anyone hosting a gathering — weddings, birthdays, reunions, trips — who wants every guest's photos in one place without making people sign up for anything. The host brings their own cloud; guests just tap a link.",
+    a: "Anyone hosting a gathering — weddings, birthdays, reunions, trips — who wants everyone's photos in one place without making people sign up for anything. The host brings their own cloud; participants just tap a link.",
   },
   {
     q: "How does it work?",
-    a: "You create an event and connect your own Google Drive or Dropbox. We make one folder there and can only ever see that folder. You share the event link; guests pick a name and upload. Every photo lands straight in your cloud and shows up in a shared gallery everyone can see.",
+    a: "You create an event and connect your own Google Drive or Dropbox. We make one folder there and can only ever see that folder. You share the event link; participants pick a name and upload. Every photo lands straight in your cloud and shows up in a shared gallery everyone can see.",
   },
   {
-    q: "Do guests need an account or app?",
-    a: "No. No sign-up, no app, no password. A guest opens the link, optionally picks a username, and uploads from their phone or laptop. Their name is remembered on that device for next time.",
+    q: "Does anyone need an account or app?",
+    a: "No. No sign-up, no app, no password. A participant opens the link, optionally picks a username, and uploads from their phone or laptop. Their name is remembered on that device for next time.",
   },
   {
     q: "Where do the photos actually go?",
     a: "Into the host's own cloud storage — never onto our servers. We store only small event details (title, usernames, and a storage path for each photo pointing to where it lives in the host's cloud — not the photo itself), and OAuth tokens are encrypted. If you delete the folder in your cloud, the photos are gone.",
   },
   {
+    q: "Can participants upload videos too?",
+    a: "Yes, if the host turns it on. Video is off by default; from the admin page the host can enable it for the event and set a size limit. Once on, participants upload clips the same way as photos, and everyone can play them right in the gallery.",
+  },
+  {
     q: "Can everyone see the photos as they're added?",
     a: "Yes. The gallery updates on its own every few seconds, so photos appear while people keep the page open — no refresh needed. You can sort by when a photo was taken or when it was added, and opt in to a notification when new photos arrive.",
   },
   {
+    q: "Can I show the photos on a big screen?",
+    a: "Yes. Tap any photo to open it full-screen, swipe or use the arrows to browse, and hit Present for a looping fullscreen slideshow — perfect for a TV or projector at the party. New uploads join the slideshow automatically as they arrive.",
+  },
+  {
     q: "Is it free?",
-    a: "Yes. You only use your own cloud storage, so there's nothing to pay us — and nothing for your guests either.",
+    a: "Yes. You only use your own cloud storage, so there's nothing to pay us — and nothing for the people you invite either.",
   },
 ];
 
@@ -168,7 +176,7 @@ export default createRoute((c) => {
     {
       title: "Collect event photos in your own cloud",
       description:
-        "Collect photos from your guests straight into your own Google Drive or Dropbox. No app, no login — create an event, share one link, and watch the gallery fill up.",
+        "Collect photos and videos from everyone straight into your own Google Drive or Dropbox. No app, no login — create an event, share one link, watch the gallery fill up, and play it back as a fullscreen slideshow.",
       jsonLd: {
         "@context": "https://schema.org",
         "@graph": [
@@ -179,7 +187,7 @@ export default createRoute((c) => {
             applicationCategory: "PhotographyApplication",
             operatingSystem: "Any",
             description:
-              "Event photo collection that uploads guests' photos directly into the host's own Google Drive or Dropbox. No login, no servers storing your photos.",
+              "Event photo and video collection that uploads participants' media directly into the host's own Google Drive or Dropbox. No login, no servers storing your photos.",
             offers: { "@type": "Offer", price: "0", priceCurrency: "USD" },
           },
           {

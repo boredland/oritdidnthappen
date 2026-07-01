@@ -6,9 +6,10 @@ export default createRoute((c) => {
     <Prose title="Privacy" updated="June 2026">
       <p>
         <strong>or it didn't happen</strong> lets an event host collect photos
-        from their guests directly into the host's own cloud storage. The core
+        from participants directly into the host's own cloud storage. The core
         idea is simple: <strong>we never store your photos.</strong> They go
-        straight from a guest's device into the host's Google Drive or Dropbox.
+        straight from a participant's device into the host's Google Drive or
+        Dropbox.
       </p>
 
       <div>
@@ -18,20 +19,21 @@ export default createRoute((c) => {
           a Cloudflare D1 database:
         </p>
         <ul class="mt-3 list-disc pl-5 space-y-1">
-          <li>The event title and the optional email address a host provides.</li>
           <li>
-            An admin token and per-guest session tokens (random strings) used to
-            authorize access.
+            The event title and the optional email address a host provides.
           </li>
           <li>
-            Guest usernames — either chosen, or auto-generated (e.g.
+            An admin token and per-participant session tokens (random strings)
+            used to authorize access.
+          </li>
+          <li>
+            Participant usernames — either chosen, or auto-generated (e.g.
             "quiet-otter").
           </li>
           <li>
             For each uploaded photo: its filename, type, size, and a storage
-            path pointing to the file in the host's cloud (
-            <em>not</em> its location on a map) —
-            <strong>never the photo itself</strong>.
+            path pointing to the file in the host's cloud (<em>not</em> its
+            location on a map) —<strong>never the photo itself</strong>.
           </li>
         </ul>
       </div>
@@ -41,22 +43,23 @@ export default createRoute((c) => {
         <p class="mt-3">
           When a host connects Google Drive or Dropbox, we request the narrowest
           possible permission — the Google{" "}
-          <code class="text-sm">drive.file</code> scope, or Dropbox's
-          file-write scope. This lets us upload into a single folder we create
-          for the event and nothing else; we cannot see the rest of the host's
-          drive. The access and refresh tokens this produces are{" "}
+          <code class="text-sm">drive.file</code> scope, or Dropbox's file-write
+          scope. This lets us upload into a single folder we create for the
+          event and nothing else; we cannot see the rest of the host's drive.
+          The access and refresh tokens this produces are{" "}
           <strong>encrypted (AES-256-GCM) before being stored</strong> and are
-          used only to upload guests' photos and show thumbnails.
+          used only to upload participants' photos and show thumbnails.
         </p>
       </div>
 
       <div>
         <H2>No accounts, no tracking</H2>
         <p class="mt-3">
-          There are no user accounts and no passwords. A guest's username and
-          session are kept in their browser's <code class="text-sm">localStorage</code>{" "}
-          so they're recognized when they return to the same event. We don't use
-          advertising or third-party analytics trackers.
+          There are no user accounts and no passwords. A participant's username
+          and session are kept in their browser's{" "}
+          <code class="text-sm">localStorage</code> so they're recognized when
+          they return to the same event. We don't use advertising or third-party
+          analytics trackers.
         </p>
       </div>
 
