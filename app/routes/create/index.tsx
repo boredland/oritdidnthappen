@@ -1,7 +1,7 @@
 import { useState } from "hono/jsx";
 import { createRoute } from "honox/factory";
-import { createEvent, type Provider } from "../../lib/db";
 import { generateId } from "../../lib/crypto";
+import { createEvent, type Provider } from "../../lib/db";
 import { getProvider } from "../../lib/storage";
 
 const VALID_PROVIDERS: Provider[] = ["google_drive", "dropbox"];
@@ -26,7 +26,12 @@ export const POST = createRoute(async (c) => {
   }
   if (!VALID_PROVIDERS.includes(provider)) {
     return c.render(
-      <FormPage error="Please choose a storage provider." title={title} email={email} folder={folderInput} />,
+      <FormPage
+        error="Please choose a storage provider."
+        title={title}
+        email={email}
+        folder={folderInput}
+      />,
       { title: "Create event" },
     );
   }
@@ -54,7 +59,7 @@ export default createRoute((c) => {
   return c.render(<FormPage />, {
     title: "Create event",
     description:
-      "Create a photo-collection event in a minute — connect your own Google Drive or Dropbox and share one link. Guests upload straight to your cloud, no login.",
+      "Create a photo-collection event in a minute — connect your own Google Drive or Dropbox and share one link. Participants upload straight to your cloud, no login.",
   });
 });
 function FormPage({
@@ -97,12 +102,16 @@ function FormPage({
 
       <form method="post" class="mt-12 space-y-8" onSubmit={handleSubmit}>
         <div>
-          <label class="block text-xs uppercase tracking-widest text-charcoal-light mb-2">
+          <label
+            for="title"
+            class="block text-xs uppercase tracking-widest text-charcoal-light mb-2"
+          >
             Event name
           </label>
           <input
             type="text"
             name="title"
+            id="title"
             required
             maxlength={100}
             value={title}
@@ -112,12 +121,17 @@ function FormPage({
         </div>
 
         <div>
-          <label class="block text-xs uppercase tracking-widest text-charcoal-light mb-2">
-            Folder name <span class="normal-case text-shagreen">(optional)</span>
+          <label
+            for="folder"
+            class="block text-xs uppercase tracking-widest text-charcoal-light mb-2"
+          >
+            Folder name{" "}
+            <span class="normal-case text-shagreen">(optional)</span>
           </label>
           <input
             type="text"
             name="folder"
+            id="folder"
             maxlength={100}
             value={folder}
             placeholder="Defaults to the event name"
@@ -130,12 +144,16 @@ function FormPage({
         </div>
 
         <div>
-          <label class="block text-xs uppercase tracking-widest text-charcoal-light mb-2">
+          <label
+            for="email"
+            class="block text-xs uppercase tracking-widest text-charcoal-light mb-2"
+          >
             Email <span class="normal-case text-shagreen">(optional)</span>
           </label>
           <input
             type="email"
             name="email"
+            id="email"
             value={email}
             placeholder="you@example.com"
             class="w-full border border-sand bg-parchment-light px-4 py-3 text-charcoal placeholder:text-shagreen focus:outline-none focus:ring-1 focus:ring-charcoal focus:border-charcoal"
@@ -146,10 +164,10 @@ function FormPage({
           </p>
         </div>
 
-        <div>
-          <label class="block text-xs uppercase tracking-widest text-charcoal-light mb-3">
+        <fieldset>
+          <legend class="block text-xs uppercase tracking-widest text-charcoal-light mb-3">
             Storage
-          </label>
+          </legend>
           <div class="grid grid-cols-2 gap-4">
             <label class="cursor-pointer border border-sand bg-parchment-light p-6 flex flex-col items-center gap-3 text-center has-[:checked]:border-charcoal has-[:checked]:bg-parchment-dark has-[:focus-visible]:outline has-[:focus-visible]:outline-1 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-charcoal transition-colors">
               <input
@@ -163,12 +181,17 @@ function FormPage({
               <span class="text-sm tracking-wide">Google Drive</span>
             </label>
             <label class="cursor-pointer border border-sand bg-parchment-light p-6 flex flex-col items-center gap-3 text-center has-[:checked]:border-charcoal has-[:checked]:bg-parchment-dark has-[:focus-visible]:outline has-[:focus-visible]:outline-1 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-charcoal transition-colors">
-              <input type="radio" name="provider" value="dropbox" class="sr-only" />
+              <input
+                type="radio"
+                name="provider"
+                value="dropbox"
+                class="sr-only"
+              />
               <DropboxIcon />
               <span class="text-sm tracking-wide">Dropbox</span>
             </label>
           </div>
-        </div>
+        </fieldset>
 
         <button
           type="submit"
@@ -184,7 +207,13 @@ function FormPage({
 
 function GoogleIcon() {
   return (
-    <svg width="28" height="28" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+    <svg
+      width="28"
+      height="28"
+      viewBox="0 0 24 24"
+      fill="none"
+      aria-hidden="true"
+    >
       <path
         d="M12 10l-6 10l-3 -5l6 -10l3 5 M9 15h12l-3 5h-12 M15 15l-6 -10h6l6 10h-6"
         stroke="#3A3632"
@@ -198,7 +227,13 @@ function GoogleIcon() {
 
 function DropboxIcon() {
   return (
-    <svg width="28" height="28" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+    <svg
+      width="28"
+      height="28"
+      viewBox="0 0 24 24"
+      fill="none"
+      aria-hidden="true"
+    >
       <path
         d="m6 3 6 3.8L6 10.6 0 6.8 6 3Zm12 0 6 3.8-6 3.8-6-3.8L18 3ZM0 14.4l6-3.8 6 3.8-6 3.8-6-3.8Zm18-3.8 6 3.8-6 3.8-6-3.8 6-3.8ZM6 19.4l6-3.8 6 3.8-6 3.8-6-3.8Z"
         stroke="#3A3632"
