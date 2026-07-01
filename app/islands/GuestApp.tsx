@@ -1508,10 +1508,14 @@ function QrIcon() {
 }
 
 function QrModal({ url, onClose }: { url: string; onClose: () => void }) {
-  // encodeQR returns SVG markup; islands render client-side so `location`
-  // is always defined here. High ECC keeps it scannable on a projector or
-  // print even with a logo-sized chunk obscured.
-  const svg = encodeQR(url, "svg", { ecc: "high", border: 1 });
+  // Client-only (island hydration), so `location` is always defined. High ECC
+  // keeps it scannable even if partly obscured. encodeQR emits an SVG with only
+  // a viewBox — no width/height — so inline it collapses to ~0 in a flex box;
+  // inject explicit dimensions (crisp edges so modules stay sharp) for size.
+  const svg = encodeQR(url, "svg", { ecc: "high", border: 1 }).replace(
+    "<svg ",
+    '<svg width="288" height="288" shape-rendering="crispEdges" ',
+  );
   return (
     <div
       role="dialog"
