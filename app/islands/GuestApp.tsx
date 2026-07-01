@@ -705,6 +705,17 @@ export default function GuestApp({
           (both hit the Turnstile-gated /api/register) can render a challenge.
           Empty and invisible until Turnstile draws an interactive challenge. */}
       <div ref={turnstileRef} class="flex justify-center empty:hidden" />
+      {!closed && (
+        <div class="mb-8 flex justify-center">
+          <button
+            type="button"
+            onClick={() => setShowQr(true)}
+            class="inline-flex items-center gap-1.5 border border-charcoal px-5 py-2 text-sm uppercase tracking-widest text-charcoal transition-colors hover:bg-charcoal hover:text-ivory"
+          >
+            <QrIcon /> QR code
+          </button>
+        </div>
+      )}
       {!closed && session && (
         <div class="max-w-2xl mx-auto">
           {/* biome-ignore lint/a11y/useSemanticElements: contains <input> — can't be <button> */}
@@ -892,15 +903,6 @@ export default function GuestApp({
               class="inline-flex items-center gap-1.5 text-charcoal-light hover:text-charcoal transition-colors"
             >
               <ShareIcon /> Share
-            </button>
-          )}
-          {!closed && (
-            <button
-              type="button"
-              onClick={() => setShowQr(true)}
-              class="inline-flex items-center gap-1.5 text-charcoal-light hover:text-charcoal transition-colors"
-            >
-              <QrIcon /> QR code
             </button>
           )}
           {push !== "unsupported" && !closed && (
