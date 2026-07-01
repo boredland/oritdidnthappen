@@ -525,6 +525,46 @@ export default function GuestApp({
     prefetchMedia(photos[lightbox - 1]);
   }, [lightbox, photos]);
 
+  // Deep-link target from ?photo=<id>, captured once at mount BEFORE the
+  // url-sync effect below can strip it. A ref (not state) since it only gates
+  // the one-shot open. undefined = not yet captured.
+  const wantedPhotoRef = useRef<string | null | undefined>(undefined);
+  const deepLinkedRef = useRef(false);
+  useEffect(() => {
+    wantedPhotoRef.current = new URLSearchParams(window.location.search).get(
+      "photo",
+    );
+  }, []);
+
+  // Persist the open photo in the URL (?photo=<id>) so it can be shared,
+  // reloaded, or deep-linked from a push notification. Keyed on the stable
+  // photo id, not the array index, which shifts as photos arrive or re-sort.
+  // replaceState keeps it out of the back-stack — closing returns to the event.
+  useEffect(() => {
+    const openId = lightbox === null ? null : (photos[lightbox]?.id ?? null);
+    const url = new URL(window.location.href);
+    if (openId) url.searchParams.set("photo", openId);
+    else url.searchParams.delete("photo");
+    window.history.replaceState(window.history.state, "", url);
+  }, [lightbox, photos]);
+
+  // Deep-link: open the lightbox on the captured ?photo target once it's
+  // loaded. Runs when photos change so a not-yet-loaded target (e.g. a fresh
+  // upload behind the initial 60) opens as soon as polling pulls it in.
+  useEffect(() => {
+    if (deepLinkedRef.current || wantedPhotoRef.current === undefined) return;
+    const wanted = wantedPhotoRef.current;
+    if (!wanted) {
+      deepLinkedRef.current = true;
+      return;
+    }
+    const idx = photos.findIndex((p) => p.id === wanted);
+    if (idx !== -1) {
+      setLightbox(idx);
+      deepLinkedRef.current = true;
+    }
+  }, [photos]);
+
   const [flash, setFlash] = useState<string | null>(null);
   const flashMsg = (msg: string) => {
     setFlash(msg);

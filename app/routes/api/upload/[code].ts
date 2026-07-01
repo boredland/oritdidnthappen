@@ -188,7 +188,9 @@ export const POST = createRoute(async (c) => {
       content_hash: hashHex,
       poster_ref: null,
     });
-    c.executionCtx.waitUntil(notifyNewPhotos(c.env, event, 1, guest.username));
+    c.executionCtx.waitUntil(
+      notifyNewPhotos(c.env, event, 1, guest.username, id),
+    );
     return c.json({
       photo: {
         id,

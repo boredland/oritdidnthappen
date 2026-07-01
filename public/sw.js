@@ -66,15 +66,29 @@ self.addEventListener("push", function (event) {
     data = event.data ? event.data.json() : {};
   } catch (_) {}
   var title = data.title || "or it didn't happen";
-  var options = {
-    body: data.body || "New photos were added.",
-    icon: data.icon || "/icon-192.png",
-    badge: data.badge || "/icon-192.png",
-    tag: data.tag || "new-photos",
-    renotify: true,
-    data: { url: data.url || "/" },
-  };
-  event.waitUntil(self.registration.showNotification(title, options));
+  var tag = data.tag || "new-photos";
+  event.waitUntil(
+    (async function () {
+      // Collapse repeat pushes for the same event into one notification, but
+      // keep the FIRST photo's url so a click opens the earliest one the user
+      // was notified about — not whichever arrived last.
+      var url = data.url || "/";
+      try {
+        var existing = await self.registration.getNotifications({ tag: tag });
+        if (existing[0] && existing[0].data && existing[0].data.url) {
+          url = existing[0].data.url;
+        }
+      } catch (_) {}
+      await self.registration.showNotification(title, {
+        body: data.body || "New photos were added.",
+        icon: data.icon || "/icon-192.png",
+        badge: data.badge || "/icon-192.png",
+        tag: tag,
+        renotify: true,
+        data: { url: url },
+      });
+    })(),
+  );
 });
 
 self.addEventListener("notificationclick", function (event) {

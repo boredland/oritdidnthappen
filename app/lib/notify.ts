@@ -22,6 +22,7 @@ export async function notifyNewPhotos(
   event: EventRow,
   count: number,
   uploader: string,
+  photoId: string,
 ): Promise<void> {
   const vapid = vapidFromEnv(env);
   if (!vapid) return;
@@ -36,7 +37,7 @@ export async function notifyNewPhotos(
   const payload = JSON.stringify({
     title: event.title,
     body,
-    url: `${env.BASE_URL}/event/${event.id}`,
+    url: `${env.BASE_URL}/event/${event.id}?photo=${photoId}`,
     tag: `event-${event.id}`,
   });
 
