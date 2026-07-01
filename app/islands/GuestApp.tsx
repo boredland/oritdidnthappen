@@ -25,6 +25,10 @@ export interface PhotoItem {
 
 export type SortMode = "added" | "taken";
 
+// Thumbnails above this index load lazily; the first screenful loads eagerly
+// so the top of the gallery paints immediately without waiting on the observer.
+const EAGER_THUMBS = 12;
+
 // Effective timestamp for a photo under a sort mode. "taken" falls back to
 // upload time when a photo has no EXIF date, so untagged photos still place.
 function sortKey(p: PhotoItem, mode: SortMode): number {
@@ -45,6 +49,7 @@ interface Props {
   code: string;
   closed: boolean;
   initialPhotos: PhotoItem[];
+  initialHasMore: boolean;
   videosEnabled: boolean;
   videoMaxBytes: number | null;
   turnstileSiteKey: string;
@@ -188,6 +193,7 @@ export default function GuestApp({
   code,
   closed,
   initialPhotos,
+  initialHasMore,
   videosEnabled,
   videoMaxBytes,
   turnstileSiteKey,
@@ -206,6 +212,12 @@ export default function GuestApp({
   const [presentFromId, setPresentFromId] = useState<string | null>(null);
   const [push, setPush] = useState<PushState>("idle");
   const [showQr, setShowQr] = useState(false);
+  const [hasMore, setHasMore] = useState(initialHasMore);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const loadMoreSentinel = useRef<HTMLDivElement | null>(null);
+  // A load-more fetch and a poll can race; a ref guards against overlapping
+  // page fetches without waiting on the async setLoadingMore render.
+  const loadingMoreRef = useRef(false);
 
   // IDs present at mount: server-rendered tiles must not run the enter
   // animation on hydration — only photos that arrive later fade in.
@@ -226,6 +238,12 @@ export default function GuestApp({
     sortRef.current = sort;
     setPhotos((prev) => sortPhotos(prev, sort));
   }, [sort]);
+  // Live mirror of photos so loadMore can read the current oldest row without
+  // capturing a stale closure or abusing setPhotos for a read.
+  const photosRef = useRef<PhotoItem[]>(photos);
+  useEffect(() => {
+    photosRef.current = photos;
+  }, [photos]);
 
   const storageKey = `pd_session_${code}`;
 
@@ -565,6 +583,63 @@ export default function GuestApp({
       deepLinkedRef.current = true;
     }
   }, [photos]);
+
+  // Infinite scroll: fetch the next older page when the sentinel nears the
+  // viewport. The keyset cursor is the oldest loaded row by created_at/id —
+  // the DB's pagination order — computed fresh each call so it's correct no
+  // matter the display sort or how many new photos polling has prepended.
+  const loadMore = useCallback(async () => {
+    if (loadingMoreRef.current) return;
+    loadingMoreRef.current = true;
+    setLoadingMore(true);
+    try {
+      const current = photosRef.current ?? [];
+      const oldest = current.reduce<PhotoItem | null>((min, p) => {
+        if (!min) return p;
+        if (p.createdAt !== min.createdAt)
+          return p.createdAt < min.createdAt ? p : min;
+        return p.id < min.id ? p : min;
+      }, null);
+      if (!oldest) return;
+      const cursor = `${oldest.createdAt}_${oldest.id}`;
+      const res = await fetch(
+        `/api/photos/${code}?cursor=${encodeURIComponent(cursor)}`,
+      );
+      if (!res.ok) return;
+      const data = (await res.json()) as {
+        photos: PhotoItem[];
+        hasMore: boolean;
+      };
+      setPhotos((prev) => {
+        const seen = new Set(prev.map((p) => p.id));
+        const fresh = data.photos.filter((p) => !seen.has(p.id));
+        if (fresh.length === 0) return prev;
+        return sortPhotos([...prev, ...fresh], sortRef.current ?? sort);
+      });
+      setHasMore(data.hasMore);
+    } catch {
+      /* transient; the sentinel stays in view and retries on next scroll */
+    } finally {
+      loadingMoreRef.current = false;
+      setLoadingMore(false);
+    }
+  }, [code, sort]);
+
+  // Trigger loadMore when the end sentinel scrolls into view (200px early so
+  // the next page is usually ready before the user reaches the bottom).
+  useEffect(() => {
+    if (!hasMore) return;
+    const el = loadMoreSentinel.current;
+    if (!el) return;
+    const obs = new IntersectionObserver(
+      (entries) => {
+        if (entries[0]?.isIntersecting) void loadMore();
+      },
+      { rootMargin: "200px" },
+    );
+    obs.observe(el);
+    return () => obs.disconnect();
+  }, [hasMore, loadMore]);
 
   const [flash, setFlash] = useState<string | null>(null);
   const flashMsg = (msg: string) => {
@@ -1019,7 +1094,7 @@ export default function GuestApp({
             <img
               src={thumbUrl(photo.id)}
               alt={`Shared by ${photo.username}`}
-              loading="lazy"
+              loading={i < EAGER_THUMBS ? "eager" : "lazy"}
               width={300}
               height={300}
               class="h-full w-full object-cover"
@@ -1044,6 +1119,15 @@ export default function GuestApp({
           </button>
         ))}
       </div>
+
+      {hasMore && (
+        <div
+          ref={loadMoreSentinel}
+          class="flex justify-center py-8 text-xs uppercase tracking-widest text-shagreen"
+        >
+          {loadingMore ? "Loading…" : ""}
+        </div>
+      )}
 
       {photos.length === 0 && (
         <p class="mt-10 text-center text-shagreen">

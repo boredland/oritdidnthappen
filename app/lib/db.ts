@@ -322,6 +322,36 @@ export async function getPhotosByEvent(
 }
 
 /**
+ * One page of an event's photos, newest-first, using a keyset cursor instead
+ * of OFFSET so concurrent inserts (guests uploading while others scroll) never
+ * shift the window and cause skipped or duplicated rows. `cursor` is the last
+ * row already seen; pass null for the first page. Fetches `limit + 1` to tell
+ * the caller whether more remain without a separate COUNT.
+ */
+export async function getPhotosPage(
+  db: D1Database,
+  eventId: string,
+  limit: number,
+  cursor: { createdAt: number; id: string } | null,
+): Promise<{ photos: PhotoWithUser[]; hasMore: boolean }> {
+  const base = `SELECT p.*, g.username
+       FROM photos p JOIN guests g ON g.id = p.guest_id
+       WHERE p.event_id = ?`;
+  const order = `ORDER BY p.created_at DESC, p.id DESC LIMIT ?`;
+  const stmt = cursor
+    ? db
+        .prepare(
+          `${base} AND (p.created_at < ? OR (p.created_at = ? AND p.id < ?)) ${order}`,
+        )
+        .bind(eventId, cursor.createdAt, cursor.createdAt, cursor.id, limit + 1)
+    : db.prepare(`${base} ${order}`).bind(eventId, limit + 1);
+  const { results } = await stmt.all<PhotoWithUser>();
+  const rows = results ?? [];
+  const hasMore = rows.length > limit;
+  return { photos: hasMore ? rows.slice(0, limit) : rows, hasMore };
+}
+
+/**
  * Photos created at or after `since` (unix seconds), oldest-first. Inclusive
  * (`>=`) so a same-second upload by another guest at the cursor isn't missed;
  * the client dedups by id, so re-returning the cursor row is harmless.

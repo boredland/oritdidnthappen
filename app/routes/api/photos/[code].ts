@@ -1,10 +1,5 @@
 import { createRoute } from "honox/factory";
-import {
-  countPhotos,
-  getEventByCode,
-  getPhotosByEvent,
-  getPhotosSince,
-} from "../../../lib/db";
+import { getEventByCode, getPhotosPage, getPhotosSince } from "../../../lib/db";
 
 export default createRoute(async (c) => {
   const code = c.req.param("code");
@@ -33,19 +28,30 @@ export default createRoute(async (c) => {
     });
   }
 
-  // Initial / paginated load, newest-first.
-  const limit = Math.min(Number(c.req.query("limit")) || 60, 100);
-  const offset = Number(c.req.query("offset")) || 0;
-  const [rows, total] = await Promise.all([
-    getPhotosByEvent(c.env.DB, event.id, limit, offset),
-    countPhotos(c.env.DB, event.id),
-  ]);
+  // Initial / paginated load, newest-first, via keyset cursor. `cursor` is
+  // "<createdAt>_<id>" of the last row the client already has; absent = page 1.
+  const limit = Math.min(Number(c.req.query("limit")) || 30, 100);
+  const cursorParam = c.req.query("cursor");
+  let cursor: { createdAt: number; id: string } | null = null;
+  if (cursorParam) {
+    const sep = cursorParam.lastIndexOf("_");
+    if (sep > 0) {
+      const createdAt = Number(cursorParam.slice(0, sep));
+      const id = cursorParam.slice(sep + 1);
+      if (Number.isFinite(createdAt) && id) cursor = { createdAt, id };
+    }
+  }
+  const { photos, hasMore } = await getPhotosPage(
+    c.env.DB,
+    event.id,
+    limit,
+    cursor,
+  );
 
   return c.json({
     closed,
-    total,
-    hasMore: offset + rows.length < total,
-    photos: rows.map((p) => ({
+    hasMore,
+    photos: photos.map((p) => ({
       id: p.id,
       username: p.username,
       createdAt: p.created_at,
