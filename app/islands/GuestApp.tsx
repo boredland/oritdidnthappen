@@ -192,6 +192,7 @@ export default function GuestApp({
   turnstileSiteKey,
 }: Props) {
   const [session, setSession] = useState<Session | null>(null);
+  const [regState, setRegState] = useState<"working" | "error">("working");
   const [sort, setSort] = useState<SortMode>("taken");
   const [photos, setPhotos] = useState<PhotoItem[]>(() =>
     sortPhotos(initialPhotos, "taken"),
@@ -243,21 +244,32 @@ export default function GuestApp({
 
   const registerGuest = useCallback(
     async (desiredUsername?: string) => {
-      const turnstileToken = await getToken();
-      const res = await fetch("/api/register", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          eventCode: code,
-          desiredUsername,
-          turnstileToken,
-        }),
-      });
-      if (!res.ok) return false;
-      const data = (await res.json()) as Session;
-      localStorage.setItem(storageKey, JSON.stringify(data));
-      setSession(data);
-      return true;
+      setRegState("working");
+      try {
+        const turnstileToken = await getToken();
+        const res = await fetch("/api/register", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            eventCode: code,
+            desiredUsername,
+            turnstileToken,
+          }),
+        });
+        if (!res.ok) {
+          setRegState("error");
+          return false;
+        }
+        const data = (await res.json()) as Session;
+        localStorage.setItem(storageKey, JSON.stringify(data));
+        setSession(data);
+        return true;
+      } catch {
+        // Network failure or a wedged challenge — surface a retry instead of
+        // stranding the guest on "Verifying…" forever.
+        setRegState("error");
+        return false;
+      }
     },
     [code, storageKey],
   );
@@ -666,15 +678,16 @@ export default function GuestApp({
           ts.execute(id);
           return;
         }
-        // Wait for the async api.js to load (≈18s budget on mobile).
-        if (++attempts > 120) {
+        // Wait for the async api.js to load (≈11s budget, just under the
+        // 12s hard timeout below so a slow script surfaces the retry).
+        if (++attempts > 72) {
           done("");
           return;
         }
         window.setTimeout(run, 150);
       };
       run();
-      window.setTimeout(() => done(""), 25000);
+      window.setTimeout(() => done(""), 12000);
     });
   };
 
@@ -783,14 +796,22 @@ export default function GuestApp({
           <p class="font-heading text-2xl font-light tracking-wide text-charcoal">
             Welcome
           </p>
-          <p class="text-charcoal-light mt-2 text-sm">Verifying…</p>
-          <button
-            type="button"
-            onClick={() => void registerGuest()}
-            class="mt-6 border border-charcoal px-6 py-2 text-sm uppercase tracking-widest hover:bg-charcoal hover:text-ivory transition-colors"
-          >
-            Join this event
-          </button>
+          {regState === "working" ? (
+            <p class="text-charcoal-light mt-2 text-sm">Verifying…</p>
+          ) : (
+            <>
+              <p class="text-charcoal-light mt-2 text-sm">
+                We couldn't verify your browser. Please try again.
+              </p>
+              <button
+                type="button"
+                onClick={() => void registerGuest()}
+                class="mt-6 border border-charcoal px-6 py-2 text-sm uppercase tracking-widest hover:bg-charcoal hover:text-ivory transition-colors"
+              >
+                Try again
+              </button>
+            </>
+          )}
         </div>
       )}
 
