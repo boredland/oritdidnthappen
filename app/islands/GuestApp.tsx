@@ -1,9 +1,4 @@
 import { useCallback, useEffect, useRef, useState } from "hono/jsx";
-import {
-  type BgUploadFile,
-  startBackgroundUpload,
-  supportsBackgroundUpload,
-} from "../lib/bgupload";
 import { readTakenAt } from "../lib/exif";
 import { thumbUrl } from "../lib/media-url";
 import { generatePoster } from "../lib/poster";
@@ -207,10 +202,6 @@ export default function GuestApp({
   const [presenting, setPresenting] = useState(false);
   const [presentFromId, setPresentFromId] = useState<string | null>(null);
   const [push, setPush] = useState<PushState>("idle");
-  const [bgActive, setBgActive] = useState(false);
-  // Background-fetch batch id → the job keys it owns, so a SW completion
-  // message finalizes exactly those jobs. Stable across renders.
-  const [bgBatches] = useState(() => new Map<string, string[]>());
 
   // IDs present at mount: server-rendered tiles must not run the enter
   // animation on hydration — only photos that arrive later fade in.
@@ -397,72 +388,12 @@ export default function GuestApp({
         }),
       );
 
-      // Background Fetch keeps uploading even if the PWA is closed
-      // (Chromium/Android), but the SW can't thread a video's row id into a
-      // follow-up poster request — so any batch with a video stays in-page.
-      const hasVideo = withMeta.some((p) =>
-        VIDEO_ACCEPTED.includes(p.file.type),
-      );
-      if (supportsBackgroundUpload() && !hasVideo) {
-        const bgFiles: BgUploadFile[] = withMeta.map((p) => ({
-          file: p.file,
-          takenAt: p.takenAt,
-        }));
-        const handle = await startBackgroundUpload(
-          code,
-          session.sessionToken,
-          bgFiles,
-          (percent) => {
-            for (const p of withMeta) patchJob(p.key, { progress: percent });
-          },
-        );
-        if (handle) {
-          bgBatches.set(
-            handle.id,
-            withMeta.map((p) => p.key),
-          );
-          setBgActive(true);
-          return;
-        }
-        // Registration failed (quota / permission) — fall back in-page.
-      }
-
       await mapPool(withMeta, UPLOAD_CONCURRENCY, async (p) => {
         await uploadOne(p.file, p.key, p.takenAt, p.poster);
       });
     },
     [session, closed, code, videosEnabled, videoMaxBytes],
   );
-
-  // Finalize a background batch when the service worker reports it done/failed
-  // (fires whether or not the page stayed open).
-  useEffect(() => {
-    if (!("serviceWorker" in navigator)) return;
-    const onMsg = (e: MessageEvent) => {
-      const data = e.data as { type?: string; id?: string } | null;
-      if (
-        !data?.id ||
-        (data.type !== "bgupload-done" && data.type !== "bgupload-fail")
-      )
-        return;
-      const keys = bgBatches.get(data.id);
-      if (!keys) return;
-      bgBatches.delete(data.id);
-      const failed = data.type === "bgupload-fail";
-      setJobs((prev) =>
-        prev.map((j) =>
-          keys.includes(j.key)
-            ? failed
-              ? { ...j, status: "error", error: "Upload failed" }
-              : { ...j, status: "done", progress: 100 }
-            : j,
-        ),
-      );
-      if (bgBatches.size === 0) setBgActive(false);
-    };
-    navigator.serviceWorker.addEventListener("message", onMsg);
-    return () => navigator.serviceWorker.removeEventListener("message", onMsg);
-  }, []);
 
   const addJob = (job: UploadJob) => setJobs((prev) => [job, ...prev]);
   const patchJob = (key: string, patch: Partial<UploadJob>) =>
@@ -869,7 +800,7 @@ export default function GuestApp({
                       style={{ transform: `scaleX(${agg.percent / 100})` }}
                     />
                   </div>
-                  {agg.uploading > 0 && !bgActive && (
+                  {agg.uploading > 0 && (
                     <p class="mt-2 text-[11px] text-taupe/80">
                       Keep this screen open until uploading finishes.
                     </p>

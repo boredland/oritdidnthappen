@@ -82,6 +82,13 @@ export const POST = createRoute(async (c) => {
     return c.json({ error: "Too large" }, 413);
   }
 
+  // A declared-empty body is the signature of a client that lost the file in
+  // transit (e.g. Background Fetch on Android drops the body). Reject before
+  // touching storage so it can never hash to empty and dedup into a ghost row.
+  if (c.req.header("Content-Length") === "0") {
+    return c.json({ error: "Empty body" }, 400);
+  }
+
   const provider = getProvider(event.provider);
   const accessToken = await ensureValidToken(c.env.DB, c.env, event);
 
@@ -134,6 +141,18 @@ export const POST = createRoute(async (c) => {
       uploadP,
       hashP,
     ]);
+
+    // Authoritative empty-body backstop: a zero-byte stream hashes to the empty
+    // digest and would otherwise dedup against any prior 0-byte row, returning
+    // 200 while storing nothing. Drop the useless cloud file and fail loudly.
+    if (bytes === 0) {
+      try {
+        await provider.deleteFile(accessToken, fileRef);
+      } catch {
+        /* orphan empty cloud file; best effort */
+      }
+      return c.json({ error: "Empty body" }, 400);
+    }
 
     // Dedup: a streamed upload commits the bytes before the hash is known, so
     // a duplicate is caught after upload — delete the redundant cloud copy
