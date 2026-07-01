@@ -318,6 +318,30 @@ export default function GuestApp({
     return () => window.removeEventListener("beforeunload", warn);
   }, [uploading]);
 
+  // Convert HEIC/HEIF from camera capture to JPEG so the browser can display
+  // the uploaded image natively in <img> tags (most browsers lack HEIC support).
+  // Falls back to the original on failure so the photo isn't lost entirely.
+  async function heicToJpeg(file: File): Promise<File> {
+    const bmp = await createImageBitmap(file);
+    const canvas = document.createElement("canvas");
+    canvas.width = bmp.width;
+    canvas.height = bmp.height;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) throw new Error("2d context unavailable");
+    ctx.drawImage(bmp, 0, 0);
+    bmp.close();
+    const blob = await new Promise<Blob>((resolve, reject) => {
+      canvas.toBlob(
+        (b) => (b ? resolve(b) : reject(new Error("toBlob returned null"))),
+        "image/jpeg",
+        0.92,
+      );
+    });
+    const name =
+      file.name.replace(/\.(heic|heif)$/i, ".jpg") || `${file.name}.jpg`;
+    return new File([blob], name, { type: "image/jpeg" });
+  }
+
   const handleFiles = useCallback(
     async (files: FileList | File[]) => {
       if (!session || closed) return;
@@ -356,12 +380,20 @@ export default function GuestApp({
       // non-videos (and on any failure), so a video just carries both.
       const withMeta = await Promise.all(
         pending.map(async (p) => {
-          const isVid = VIDEO_ACCEPTED.includes(p.file.type);
+          // Convert HEIC/HEIF camera-capture files so the browser can display
+          // the uploaded JPEG natively in <img> tags. On failure, fall back
+          // to the original — the upload succeeds, display may just not work.
+          const isHeic =
+            p.file.type === "image/heic" || p.file.type === "image/heif";
+          const file = isHeic
+            ? await heicToJpeg(p.file).catch(() => p.file)
+            : p.file;
+          const isVid = VIDEO_ACCEPTED.includes(file.type);
           const [takenAt, poster] = await Promise.all([
-            readTakenAt(p.file),
-            isVid ? generatePoster(p.file) : Promise.resolve<Blob | null>(null),
+            readTakenAt(file),
+            isVid ? generatePoster(file) : Promise.resolve<Blob | null>(null),
           ]);
-          return { ...p, takenAt, poster };
+          return { ...p, file, takenAt, poster };
         }),
       );
 
