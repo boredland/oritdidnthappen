@@ -209,6 +209,7 @@ export default function GuestApp({
 
   const fileInput = useRef<HTMLInputElement | null>(null);
   const cameraInput = useRef<HTMLInputElement | null>(null);
+  const videoInput = useRef<HTMLInputElement | null>(null);
   // Polling keys off upload time (createdAt), independent of the display sort,
   // so new uploads are always caught regardless of their EXIF date.
   const sinceRef = useRef<number>(
@@ -749,6 +750,29 @@ export default function GuestApp({
           >
             <CameraIcon size={18} class="text-ivory" /> Take a photo
           </button>
+          {videosEnabled && (
+            <>
+              <input
+                ref={videoInput}
+                type="file"
+                accept="video/*"
+                capture="environment"
+                class="sr-only"
+                onChange={(e) => {
+                  const t = e.target as HTMLInputElement;
+                  if (t.files) void handleFiles(t.files);
+                  t.value = "";
+                }}
+              />
+              <button
+                type="button"
+                onClick={() => videoInput.current?.click()}
+                class="mt-3 flex w-full items-center justify-center gap-2 border border-charcoal py-3 text-sm uppercase tracking-widest text-charcoal transition-colors hover:bg-charcoal hover:text-ivory"
+              >
+                <VideoIcon size={18} /> Record a video
+              </button>
+            </>
+          )}
         </div>
       )}
 
@@ -1363,6 +1387,40 @@ function CameraIcon({
         r="3.4"
         stroke="currentColor"
         stroke-width="1.1"
+      />
+    </svg>
+  );
+}
+
+function VideoIcon({
+  size = 36,
+  class: cls = "mx-auto text-taupe",
+}: {
+  size?: number;
+  class?: string;
+}) {
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+      class={cls}
+      aria-hidden="true"
+    >
+      <rect
+        x="2.5"
+        y="7"
+        width="12.5"
+        height="10"
+        stroke="currentColor"
+        stroke-width="1.1"
+      />
+      <path
+        d="M15 10.5 21 7.5V16.5L15 13.5"
+        stroke="currentColor"
+        stroke-width="1.1"
+        stroke-linejoin="round"
       />
     </svg>
   );
