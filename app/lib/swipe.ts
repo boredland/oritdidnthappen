@@ -6,7 +6,11 @@
  */
 
 /** Past an edge with no neighbour, motion is damped to 35%. */
-export function dampDrag(dx: number, hasPrev: boolean, hasNext: boolean): number {
+export function dampDrag(
+  dx: number,
+  hasPrev: boolean,
+  hasNext: boolean,
+): number {
   const pastEdge = (dx > 0 && !hasPrev) || (dx < 0 && !hasNext);
   return pastEdge ? dx * 0.35 : dx;
 }
@@ -28,7 +32,8 @@ export function resolveSwipe(
   hasNext: boolean,
 ): "prev" | "next" | null {
   const velocity = Math.abs(dx) / Math.max(1, dtMs);
-  const committed = Math.abs(dx) > SWIPE_DISTANCE_PX || velocity > SWIPE_VELOCITY;
+  const committed =
+    Math.abs(dx) > SWIPE_DISTANCE_PX || velocity > SWIPE_VELOCITY;
   if (!committed) return null;
   if (dx < 0 && hasNext) return "next";
   if (dx > 0 && hasPrev) return "prev";

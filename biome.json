@@ -16,28 +16,7 @@
   "linter": {
     "enabled": true,
     "rules": {
-      "preset": "recommended",
-      "style": {
-        "useShorthandFunctionType": "off",
-        "noNonNullAssertion": "off"
-      },
-      "complexity": {
-        "useOptionalChain": "off"
-      },
-      "suspicious": {
-        "noExplicitAny": "off"
-      },
-      "a11y": {
-        "noRedundantAlt": "off",
-        "useKeyWithClickEvents": "off",
-        "noStaticElementInteractions": "off",
-        "noSvgWithoutTitle": "off",
-        "useMediaCaption": "off",
-        "useValidAriaRole": "off"
-      },
-      "correctness": {
-        "noUnusedVariables": "warn"
-      }
+      "preset": "recommended"
     }
   },
   "javascript": {

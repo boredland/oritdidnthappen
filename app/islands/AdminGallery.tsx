@@ -81,7 +81,7 @@ export default function AdminGallery({
           <div class="relative w-full aspect-square bg-parchment-dark overflow-hidden group">
             <img
               src={thumbUrl(p.id)}
-              alt={`Photo by ${p.username}`}
+              alt={`Shared by ${p.username}`}
               loading="lazy"
               class="h-full w-full object-cover"
             />

@@ -1,5 +1,5 @@
-import { createRoute } from "honox/factory";
 import { secureHeaders } from "hono/secure-headers";
+import { createRoute } from "honox/factory";
 
 // Baseline security hygiene on every response: HSTS, nosniff, referrer policy,
 // and clickjacking protection. CSP is intentionally omitted here — the app

@@ -122,7 +122,9 @@ export async function updateEventAccessToken(
   tokenExpiry: number,
 ): Promise<void> {
   await db
-    .prepare(`UPDATE events SET access_token = ?, token_expiry = ? WHERE id = ?`)
+    .prepare(
+      `UPDATE events SET access_token = ?, token_expiry = ? WHERE id = ?`,
+    )
     .bind(accessToken, tokenExpiry, id)
     .run();
 }
@@ -145,7 +147,9 @@ export async function setEventVideoSettings(
   maxBytes: number | null,
 ): Promise<void> {
   await db
-    .prepare(`UPDATE events SET videos_enabled = ?, video_max_bytes = ? WHERE id = ?`)
+    .prepare(
+      `UPDATE events SET videos_enabled = ?, video_max_bytes = ? WHERE id = ?`,
+    )
     .bind(enabled ? 1 : 0, maxBytes, id)
     .run();
 }
@@ -390,7 +394,9 @@ export async function removePushSubscription(
   endpoint: string,
 ): Promise<void> {
   await db
-    .prepare(`DELETE FROM push_subscriptions WHERE event_id = ? AND endpoint = ?`)
+    .prepare(
+      `DELETE FROM push_subscriptions WHERE event_id = ? AND endpoint = ?`,
+    )
     .bind(eventId, endpoint)
     .run();
 }
@@ -411,7 +417,9 @@ export async function isSubscribed(
   endpoint: string,
 ): Promise<boolean> {
   const row = await db
-    .prepare(`SELECT 1 FROM push_subscriptions WHERE event_id = ? AND endpoint = ?`)
+    .prepare(
+      `SELECT 1 FROM push_subscriptions WHERE event_id = ? AND endpoint = ?`,
+    )
     .bind(eventId, endpoint)
     .first();
   return row !== null;
@@ -435,7 +443,10 @@ export async function deleteSubscriptionById(
   db: D1Database,
   id: string,
 ): Promise<void> {
-  await db.prepare(`DELETE FROM push_subscriptions WHERE id = ?`).bind(id).run();
+  await db
+    .prepare(`DELETE FROM push_subscriptions WHERE id = ?`)
+    .bind(id)
+    .run();
 }
 
 /** Event ids an endpoint is currently subscribed to (for SW re-subscription). */
@@ -472,7 +483,9 @@ export async function deleteEvent(
 ): Promise<void> {
   await db.batch([
     db.prepare(`DELETE FROM photos WHERE event_id = ?`).bind(eventId),
-    db.prepare(`DELETE FROM push_subscriptions WHERE event_id = ?`).bind(eventId),
+    db
+      .prepare(`DELETE FROM push_subscriptions WHERE event_id = ?`)
+      .bind(eventId),
     db.prepare(`DELETE FROM guests WHERE event_id = ?`).bind(eventId),
     db.prepare(`DELETE FROM events WHERE id = ?`).bind(eventId),
   ]);

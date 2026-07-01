@@ -1,5 +1,9 @@
 import { createRoute } from "honox/factory";
-import { deleteEvent, getEventByCode, getEventFileRefs } from "../../../../lib/db";
+import {
+  deleteEvent,
+  getEventByCode,
+  getEventFileRefs,
+} from "../../../../lib/db";
 import { ensureValidToken, getProvider } from "../../../../lib/storage";
 
 export const POST = createRoute(async (c) => {

@@ -10,6 +10,7 @@ type Head = {
 
 declare module "hono" {
   interface ContextRenderer {
+    // biome-ignore lint/style/useShorthandFunctionType: module augmentation requires interface call signature
     (
       content: string | Promise<string>,
       head?: Head,

@@ -33,7 +33,7 @@ interface DropboxTokenResponse {
  */
 function apiArg(value: unknown): string {
   return JSON.stringify(value).replace(/[\u007f-\uffff]/g, (ch) => {
-    return "\\u" + ch.charCodeAt(0).toString(16).padStart(4, "0");
+    return `\\u${ch.charCodeAt(0).toString(16).padStart(4, "0")}`;
   });
 }
 
@@ -105,10 +105,7 @@ export const dropbox: StorageProvider = {
     };
   },
 
-  async createFolder(
-    accessToken: string,
-    name: string,
-  ): Promise<FolderResult> {
+  async createFolder(accessToken: string, name: string): Promise<FolderResult> {
     const path = `/${name.replace(/^\/+/, "")}`;
     const res = await fetch(CREATE_FOLDER, {
       method: "POST",

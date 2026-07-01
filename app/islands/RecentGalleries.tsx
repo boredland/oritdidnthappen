@@ -10,7 +10,7 @@ export default function RecentGalleries() {
       if (stored) {
         setGalleries(JSON.parse(stored));
       }
-    } catch (e) {}
+    } catch {}
   }, []);
 
   if (galleries.length === 0) return null;
@@ -28,7 +28,7 @@ export default function RecentGalleries() {
           >
             <h3 class="font-medium text-charcoal">{g.title}</h3>
             <p class="text-xs uppercase tracking-widest text-charcoal-light mt-2">
-              {g.role === "admin" ? "Admin View" : "Event Page"}
+              {g.viewRole === "admin" ? "Admin View" : "Event Page"}
             </p>
           </a>
         ))}

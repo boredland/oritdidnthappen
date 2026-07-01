@@ -445,7 +445,7 @@ export default function GuestApp({
       await fetch(`/api/upload/${code}`, {
         method: "POST",
         headers: {
-          Authorization: `Bearer ${session!.sessionToken}`,
+          Authorization: `Bearer ${session?.sessionToken ?? ""}`,
           "Content-Type": "image/jpeg",
           "X-Filename": "poster.jpg",
           "X-Poster-For": photoId,
@@ -465,7 +465,10 @@ export default function GuestApp({
     const { promise, resolve } = Promise.withResolvers<void>();
     const xhr = new XMLHttpRequest();
     xhr.open("POST", `/api/upload/${code}`);
-    xhr.setRequestHeader("Authorization", `Bearer ${session!.sessionToken}`);
+    xhr.setRequestHeader(
+      "Authorization",
+      `Bearer ${session?.sessionToken ?? ""}`,
+    );
     xhr.setRequestHeader("Content-Type", file.type);
     xhr.setRequestHeader("X-Filename", encodeURIComponent(file.name));
     xhr.setRequestHeader("X-Taken-At", takenAt != null ? String(takenAt) : "");
@@ -714,9 +717,19 @@ export default function GuestApp({
       <div ref={turnstileRef} />
       {!closed && (
         <div class="max-w-2xl mx-auto">
+          {/* biome-ignore lint/a11y/useSemanticElements: contains <input> — can't be <button> */}
           <div
             id="upload-zone"
+            role="button"
+            tabIndex={0}
+            aria-label="Add photos — drop files here or activate to browse"
             onClick={() => fileInput.current?.click()}
+            onKeyDown={(e: KeyboardEvent) => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault();
+                fileInput.current?.click();
+              }
+            }}
             onDragOver={(e: DragEvent) => {
               e.preventDefault();
               setDragging(true);
@@ -914,7 +927,7 @@ export default function GuestApp({
           >
             <img
               src={thumbUrl(photo.id)}
-              alt={`Photo by ${photo.username}`}
+              alt={`Shared by ${photo.username}`}
               loading="lazy"
               width={300}
               height={300}
@@ -927,6 +940,7 @@ export default function GuestApp({
                     viewBox="0 0 24 24"
                     fill="currentColor"
                     class="h-5 w-5 translate-x-0.5"
+                    aria-hidden="true"
                   >
                     <path d="M8 5v14l11-7z" />
                   </svg>
@@ -1062,7 +1076,12 @@ function Lightbox({
 
   return (
     <div
+      role="dialog"
+      aria-label="Photo lightbox"
       onClick={onClose}
+      onKeyDown={(e: KeyboardEvent) => {
+        if (e.key === "Escape") onClose();
+      }}
       onTouchStart={(e) => {
         gesture.current = { x: e.changedTouches[0].clientX, t: e.timeStamp };
       }}
@@ -1139,14 +1158,25 @@ function Lightbox({
             src={`/api/media/${photo.id}`}
             onClick={(e) => e.stopPropagation()}
             class="lightbox-img-in max-h-[85vh] max-w-full object-contain"
-          />
+          >
+            <track kind="captions" />
+          </video>
         ) : (
-          <img
-            src={thumbUrl(photo.id, "full")}
-            alt={`Photo by ${photo.username}`}
+          <button
+            type="button"
+            aria-label="Close — prevents click from closing lightbox"
             onClick={(e) => e.stopPropagation()}
-            class="lightbox-img-in max-h-[85vh] max-w-full object-contain"
-          />
+            onKeyDown={(e: KeyboardEvent) => {
+              if (e.key === "Enter" || e.key === " ") e.stopPropagation();
+            }}
+            class="appearance-none bg-transparent p-0 border-0 w-auto block"
+          >
+            <img
+              src={thumbUrl(photo.id, "full")}
+              alt={`Shared by ${photo.username}`}
+              class="lightbox-img-in max-h-[85vh] max-w-full object-contain pointer-events-none"
+            />
+          </button>
         )}
       </div>
       <p class="mt-4 text-ivory/70 text-sm tracking-wide">{photo.username}</p>
@@ -1311,7 +1341,7 @@ function Slideshow({
           <img
             key={item.id}
             src={thumbUrl(item.id, "full")}
-            alt={`Photo by ${item.username}`}
+            alt={`Shared by ${item.username}`}
             class="max-h-screen max-w-full object-contain"
           />
         ))}

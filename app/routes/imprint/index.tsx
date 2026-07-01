@@ -11,9 +11,7 @@ const OPERATOR = {
 export default createRoute((c) => {
   return c.render(
     <Prose title="Imprint" updated="June 2026">
-      <p>
-        Angaben gemäß § 5 TMG.
-      </p>
+      <p>Angaben gemäß § 5 TMG.</p>
 
       <div>
         <H2>Anbieter (TMG §5)</H2>

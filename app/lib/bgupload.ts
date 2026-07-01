@@ -9,13 +9,6 @@
  * surface we use is declared here.
  */
 
-interface BackgroundFetchRecordProgress {
-  uploaded: number;
-  uploadTotal: number;
-  downloaded: number;
-  result: "" | "success" | "failure";
-}
-
 interface BackgroundFetchRegistration extends EventTarget {
   readonly id: string;
   readonly uploaded: number;

@@ -1,12 +1,8 @@
 import type { Bindings } from "../global";
 import { decryptToken, encryptToken } from "./crypto";
-import {
-  type EventRow,
-  type Provider,
-  updateEventAccessToken,
-} from "./db";
-import { googleDrive } from "./google";
+import { type EventRow, type Provider, updateEventAccessToken } from "./db";
 import { dropbox } from "./dropbox";
+import { googleDrive } from "./google";
 
 export interface TokenSet {
   accessToken: string;
@@ -149,7 +145,10 @@ export async function ensureValidToken(
   if (!event.access_token) {
     throw new Error("Event has no connected storage");
   }
-  const accessToken = await decryptToken(event.access_token, env.ENCRYPTION_KEY);
+  const accessToken = await decryptToken(
+    event.access_token,
+    env.ENCRYPTION_KEY,
+  );
 
   const stillValid =
     event.token_expiry == null ||

@@ -86,7 +86,13 @@ export function aggregateProgress(jobs: ProgressJob[]): UploadAggregate {
 
   const percent =
     totalWeight > 0 ? Math.round((transferred / totalWeight) * 100) : 0;
-  return { done, uploading, errored, percent, uploadedCount: Math.floor(fractionalDone) };
+  return {
+    done,
+    uploading,
+    errored,
+    percent,
+    uploadedCount: Math.floor(fractionalDone),
+  };
 }
 
 /** Accepted image MIME types. Images are always allowed, regardless of event settings. */

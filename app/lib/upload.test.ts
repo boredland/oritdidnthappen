@@ -216,11 +216,15 @@ describe("classifyFile", () => {
 
   it("falls back to the 90MB ceiling when no per-event limit is set", () => {
     const enabledNoLimit = { videosEnabled: true, videoMaxBytes: null };
-    expect(classifyFile(f("video/mp4", 80 * 1024 * 1024), enabledNoLimit)).toEqual({
+    expect(
+      classifyFile(f("video/mp4", 80 * 1024 * 1024), enabledNoLimit),
+    ).toEqual({
       ok: true,
       kind: "video",
     });
-    expect(classifyFile(f("video/mp4", 91 * 1024 * 1024), enabledNoLimit)).toEqual({
+    expect(
+      classifyFile(f("video/mp4", 91 * 1024 * 1024), enabledNoLimit),
+    ).toEqual({
       ok: false,
       reason: "Too large",
     });

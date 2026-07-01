@@ -31,7 +31,7 @@ export default createRoute(async (c) => {
       <GalleryTracker
         code={event.id}
         title={event.title}
-        role="guest"
+        viewRole="guest"
         url={`/event/${event.id}`}
       />
       {coverUrl && (

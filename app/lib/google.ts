@@ -61,7 +61,9 @@ export const googleDrive: StorageProvider = {
     try {
       json = JSON.parse(bodyText) as GoogleTokenResponse;
     } catch {
-      throw new Error(`Google token exchange failed: ${res.status} ${bodyText}`);
+      throw new Error(
+        `Google token exchange failed: ${res.status} ${bodyText}`,
+      );
     }
     if (!res.ok || json.error) {
       throw new Error(
@@ -102,10 +104,7 @@ export const googleDrive: StorageProvider = {
     };
   },
 
-  async createFolder(
-    accessToken: string,
-    name: string,
-  ): Promise<FolderResult> {
+  async createFolder(accessToken: string, name: string): Promise<FolderResult> {
     const res = await fetch(DRIVE_FILES, {
       method: "POST",
       headers: {
@@ -198,10 +197,9 @@ export const googleDrive: StorageProvider = {
     // which is orders of magnitude smaller than the multi-MB original.
     if (size === "full") return original();
 
-    const meta = await fetch(
-      `${DRIVE_FILES}/${fileRef}?fields=thumbnailLink`,
-      { headers: { Authorization: `Bearer ${accessToken}` } },
-    );
+    const meta = await fetch(`${DRIVE_FILES}/${fileRef}?fields=thumbnailLink`, {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    });
     if (!meta.ok) return original();
     const { thumbnailLink } = (await meta.json()) as {
       thumbnailLink?: string;
@@ -216,7 +214,6 @@ export const googleDrive: StorageProvider = {
     });
     return thumb.ok ? thumb : original();
   },
-
 
   isFileNotFound(res: Response): boolean {
     // Drive returns 404 for a deleted file. The grid path fetches metadata

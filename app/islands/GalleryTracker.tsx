@@ -1,9 +1,9 @@
-import { useEffect, useState } from "hono/jsx";
+import { useEffect } from "hono/jsx";
 
 export interface VisitedGallery {
   code: string;
   title: string;
-  role: "guest" | "admin";
+  viewRole: "guest" | "admin";
   url: string;
   visitedAt: number;
 }
@@ -11,12 +11,12 @@ export interface VisitedGallery {
 export default function GalleryTracker({
   code,
   title,
-  role,
+  viewRole,
   url,
 }: {
   code: string;
   title: string;
-  role: "guest" | "admin";
+  viewRole: "guest" | "admin";
   url: string;
 }) {
   useEffect(() => {
@@ -24,13 +24,23 @@ export default function GalleryTracker({
       const stored = localStorage.getItem("visitedGalleries");
       let galleries: VisitedGallery[] = stored ? JSON.parse(stored) : [];
 
+      // Migrate entries written before the viewRole rename (role -> viewRole).
+      for (const g of galleries as { role?: unknown; viewRole?: unknown }[]) {
+        if (!g.viewRole && g.role) {
+          g.viewRole = g.role;
+          delete g.role;
+        }
+      }
+
       // Remove existing entry to move it to top
-      galleries = galleries.filter((g) => !(g.code === code && g.role === role));
+      galleries = galleries.filter(
+        (g) => !(g.code === code && g.viewRole === viewRole),
+      );
 
       galleries.unshift({
         code,
         title,
-        role,
+        viewRole,
         url,
         visitedAt: Date.now(),
       });
@@ -41,7 +51,7 @@ export default function GalleryTracker({
     } catch (e) {
       console.error("Failed to track gallery", e);
     }
-  }, [code, title, role, url]);
+  }, [code, title, viewRole, url]);
 
   return null;
 }

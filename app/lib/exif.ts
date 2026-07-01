@@ -37,7 +37,11 @@ export async function readTakenAt(file: File): Promise<number | null> {
   return null;
 }
 
-function parseApp1(view: DataView, start: number, length: number): number | null {
+function parseApp1(
+  view: DataView,
+  start: number,
+  length: number,
+): number | null {
   // "Exif\0\0"
   if (
     view.getUint32(start) !== 0x45786966 ||

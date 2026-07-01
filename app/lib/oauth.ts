@@ -1,9 +1,9 @@
 import type { Context } from "hono";
+import { encryptToken } from "./crypto";
 import type { Provider } from "./db";
 import { getEventByCode, setEventStorage } from "./db";
-import { encryptToken } from "./crypto";
-import { getProvider } from "./storage";
 import { sendAdminLink } from "./email";
+import { getProvider } from "./storage";
 
 /**
  * Shared OAuth callback: exchange the code, encrypt + persist tokens, create

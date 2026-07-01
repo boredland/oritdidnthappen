@@ -13,10 +13,10 @@ export default createRoute(async (c) => {
   // uncaught 500 (which Cloudflare could cache at the edge).
   try {
     const photo = await getPhotoById(c.env.DB, photoId);
-    if (!photo || !photo.mime_type.startsWith("video/")) return c.notFound();
+    if (!photo?.mime_type?.startsWith("video/")) return c.notFound();
 
     const event = await getEventByCode(c.env.DB, photo.event_id);
-    if (!event || !event.access_token) return c.notFound();
+    if (!event?.access_token) return c.notFound();
     const accessToken = await ensureValidToken(c.env.DB, c.env, event);
     const provider = getProvider(event.provider);
     const res = await provider.streamMedia(

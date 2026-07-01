@@ -43,11 +43,11 @@ export default createRoute(async (c) => {
     if (!photo) return placeholder();
 
     const event = await getEventByCode(c.env.DB, photo.event_id);
-    if (!event || !event.access_token) return placeholder();
+    if (!event?.access_token) return placeholder();
 
     const isVideo = photo.mime_type.startsWith("video/");
     if (isVideo && !photo.poster_ref) return placeholder();
-    const ref = isVideo ? photo.poster_ref! : photo.file_ref;
+    const ref = photo.poster_ref ?? photo.file_ref;
 
     const accessToken = await ensureValidToken(c.env.DB, c.env, event);
     const provider = getProvider(event.provider);

@@ -1,11 +1,18 @@
 import { createRoute } from "honox/factory";
-import { getEventByCode, getPhotoById, setCoverPhoto } from "../../../../lib/db";
+import {
+  getEventByCode,
+  getPhotoById,
+  setCoverPhoto,
+} from "../../../../lib/db";
 
 export const POST = createRoute(async (c) => {
   const code = c.req.param("code");
   if (!code) return c.json({ error: "Missing code" }, 400);
   // photoId null clears the cover.
-  const body = await c.req.json<{ adminToken?: string; photoId?: string | null }>();
+  const body = await c.req.json<{
+    adminToken?: string;
+    photoId?: string | null;
+  }>();
 
   const event = await getEventByCode(c.env.DB, code);
   if (!event) return c.json({ error: "Unknown event" }, 404);

@@ -54,7 +54,7 @@ export default createRoute(async (c) => {
       <GalleryTracker
         code={event.id}
         title={event.title}
-        role="admin"
+        viewRole="admin"
         url={`/event/${event.id}/admin?token=${token}`}
       />
       {isNew && (

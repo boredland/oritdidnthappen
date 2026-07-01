@@ -74,7 +74,11 @@ export async function encryptToken(
   // Uint8Array<ArrayBufferLike> that Workers' SubtleCrypto types reject.
   const data = new Uint8Array(new ArrayBuffer(encoded.length));
   data.set(encoded);
-  const cipher = await crypto.subtle.encrypt({ name: "AES-GCM", iv }, key, data);
+  const cipher = await crypto.subtle.encrypt(
+    { name: "AES-GCM", iv },
+    key,
+    data,
+  );
   return `${bytesToBase64(iv)}.${bytesToBase64(new Uint8Array(cipher))}`;
 }
 

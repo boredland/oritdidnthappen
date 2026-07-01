@@ -11,5 +11,7 @@ export default createRoute(async (c) => {
   const event = await getEventByCode(c.env.DB, code);
   if (!event) return c.json({ subscribed: false });
 
-  return c.json({ subscribed: await isSubscribed(c.env.DB, event.id, endpoint) });
+  return c.json({
+    subscribed: await isSubscribed(c.env.DB, event.id, endpoint),
+  });
 });

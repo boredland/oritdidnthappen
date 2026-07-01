@@ -83,7 +83,13 @@ function slice(src: Uint8Array, start: number, end: number): Bytes {
 }
 
 async function hmacKey(key: Bytes): Promise<CryptoKey> {
-  return crypto.subtle.importKey("raw", key, { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
+  return crypto.subtle.importKey(
+    "raw",
+    key,
+    { name: "HMAC", hash: "SHA-256" },
+    false,
+    ["sign"],
+  );
 }
 
 /** HKDF-Extract per RFC 5869 §2.2 — HMAC-SHA-256(salt, ikm), 32 bytes out. */
@@ -93,14 +99,24 @@ async function hkdfExtract(salt: Bytes, ikm: Bytes): Promise<Bytes> {
 }
 
 /** HKDF-Expand per RFC 5869 §2.3, truncated to `length` bytes. */
-async function hkdfExpand(prk: Bytes, info: Uint8Array, length: number): Promise<Bytes> {
+async function hkdfExpand(
+  prk: Bytes,
+  info: Uint8Array,
+  length: number,
+): Promise<Bytes> {
   const k = await hmacKey(prk);
   const out = bytes(length);
   let t: Bytes = bytes(0);
   let off = 0;
   let counter = 1;
   while (off < length) {
-    const block = fromArrayBuffer(await crypto.subtle.sign("HMAC", k, concat(t, info, Uint8Array.from([counter]))));
+    const block = fromArrayBuffer(
+      await crypto.subtle.sign(
+        "HMAC",
+        k,
+        concat(t, info, Uint8Array.from([counter])),
+      ),
+    );
     const take = Math.min(block.length, length - off);
     out.set(block.subarray(0, take), off);
     off += take;
@@ -112,18 +128,31 @@ async function hkdfExpand(prk: Bytes, info: Uint8Array, length: number): Promise
 
 async function importUaPublic(raw: Bytes): Promise<CryptoKey> {
   if (raw.length !== 65 || raw[0] !== 0x04) {
-    throw new Error("user-agent public key must be 65-byte uncompressed P-256 (0x04-prefixed)");
+    throw new Error(
+      "user-agent public key must be 65-byte uncompressed P-256 (0x04-prefixed)",
+    );
   }
-  return crypto.subtle.importKey("raw", raw, { name: "ECDH", namedCurve: "P-256" }, true, []);
+  return crypto.subtle.importKey(
+    "raw",
+    raw,
+    { name: "ECDH", namedCurve: "P-256" },
+    true,
+    [],
+  );
 }
 
 async function importVapidPrivate(vapid: VapidKeys): Promise<CryptoKey> {
   const pub = b64uDecode(vapid.publicKey);
   if (pub.length !== 65 || pub[0] !== 0x04) {
-    throw new Error("VAPID publicKey must be 65-byte uncompressed P-256 (0x04-prefixed)");
+    throw new Error(
+      "VAPID publicKey must be 65-byte uncompressed P-256 (0x04-prefixed)",
+    );
   }
   const d = b64uDecode(vapid.privateKey);
-  if (d.length !== 32) throw new Error("VAPID privateKey must be 32 raw bytes (base64url-encoded)");
+  if (d.length !== 32)
+    throw new Error(
+      "VAPID privateKey must be 32 raw bytes (base64url-encoded)",
+    );
 
   const jwk: JsonWebKey = {
     kty: "EC",
@@ -133,11 +162,22 @@ async function importVapidPrivate(vapid: VapidKeys): Promise<CryptoKey> {
     d: b64uEncode(d),
     ext: true,
   };
-  return crypto.subtle.importKey("jwk", jwk, { name: "ECDSA", namedCurve: "P-256" }, false, ["sign"]);
+  return crypto.subtle.importKey(
+    "jwk",
+    jwk,
+    { name: "ECDSA", namedCurve: "P-256" },
+    false,
+    ["sign"],
+  );
 }
 
-async function signVapidJwt(audience: string, vapid: VapidKeys): Promise<string> {
-  const header = b64uEncode(enc.encode(JSON.stringify({ typ: "JWT", alg: "ES256" })));
+async function signVapidJwt(
+  audience: string,
+  vapid: VapidKeys,
+): Promise<string> {
+  const header = b64uEncode(
+    enc.encode(JSON.stringify({ typ: "JWT", alg: "ES256" })),
+  );
   const payload = b64uEncode(
     enc.encode(
       JSON.stringify({
@@ -150,26 +190,41 @@ async function signVapidJwt(audience: string, vapid: VapidKeys): Promise<string>
   const signingInput = `${header}.${payload}`;
   const priv = await importVapidPrivate(vapid);
   const sig = fromArrayBuffer(
-    await crypto.subtle.sign({ name: "ECDSA", hash: "SHA-256" }, priv, enc.encode(signingInput)),
+    await crypto.subtle.sign(
+      { name: "ECDSA", hash: "SHA-256" },
+      priv,
+      enc.encode(signingInput),
+    ),
   );
   return `${signingInput}.${b64uEncode(sig)}`;
 }
 
-async function encryptAes128gcm(plaintext: Bytes, sub: PushSubscriptionLike): Promise<Bytes> {
+async function encryptAes128gcm(
+  plaintext: Bytes,
+  sub: PushSubscriptionLike,
+): Promise<Bytes> {
   const uaPublic = b64uDecode(sub.keys.p256dh);
   const authSecret = b64uDecode(sub.keys.auth);
 
   const uaKey = await importUaPublic(uaPublic);
-  const asKeyPair = (await crypto.subtle.generateKey({ name: "ECDH", namedCurve: "P-256" }, true, [
-    "deriveBits",
-  ])) as CryptoKeyPair;
-  const asPublic = fromArrayBuffer((await crypto.subtle.exportKey("raw", asKeyPair.publicKey)) as ArrayBuffer);
+  const asKeyPair = (await crypto.subtle.generateKey(
+    { name: "ECDH", namedCurve: "P-256" },
+    true,
+    ["deriveBits"],
+  )) as CryptoKeyPair;
+  const asPublic = fromArrayBuffer(
+    (await crypto.subtle.exportKey("raw", asKeyPair.publicKey)) as ArrayBuffer,
+  );
 
   // Cloudflare's worker types name the ECDH peer key `$public`; DOM uses
   // `public`. Both runtimes accept either field at runtime, so we cast
   // through a structural type that admits both names.
-  const ecdhAlgo = { name: "ECDH", public: uaKey } as unknown as Parameters<typeof crypto.subtle.deriveBits>[0];
-  const ecdh = fromArrayBuffer(await crypto.subtle.deriveBits(ecdhAlgo, asKeyPair.privateKey, 256));
+  const ecdhAlgo = { name: "ECDH", public: uaKey } as unknown as Parameters<
+    typeof crypto.subtle.deriveBits
+  >[0];
+  const ecdh = fromArrayBuffer(
+    await crypto.subtle.deriveBits(ecdhAlgo, asKeyPair.privateKey, 256),
+  );
 
   // RFC 8291 §3.4 — derive IKM.
   const prkKey = await hkdfExtract(authSecret, ecdh);
@@ -179,13 +234,29 @@ async function encryptAes128gcm(plaintext: Bytes, sub: PushSubscriptionLike): Pr
   // RFC 8188 §2.2 — content-encryption keys.
   const salt = crypto.getRandomValues(bytes(16));
   const prk = await hkdfExtract(salt, ikm);
-  const cekBytes = await hkdfExpand(prk, enc.encode("Content-Encoding: aes128gcm\0"), 16);
-  const nonce = await hkdfExpand(prk, enc.encode("Content-Encoding: nonce\0"), 12);
+  const cekBytes = await hkdfExpand(
+    prk,
+    enc.encode("Content-Encoding: aes128gcm\0"),
+    16,
+  );
+  const nonce = await hkdfExpand(
+    prk,
+    enc.encode("Content-Encoding: nonce\0"),
+    12,
+  );
 
   // Single-record plaintext: payload || 0x02 (last-record delimiter).
   const record = concat(plaintext, Uint8Array.from([0x02]));
-  const cek = await crypto.subtle.importKey("raw", cekBytes, { name: "AES-GCM" }, false, ["encrypt"]);
-  const ciphertext = fromArrayBuffer(await crypto.subtle.encrypt({ name: "AES-GCM", iv: nonce }, cek, record));
+  const cek = await crypto.subtle.importKey(
+    "raw",
+    cekBytes,
+    { name: "AES-GCM" },
+    false,
+    ["encrypt"],
+  );
+  const ciphertext = fromArrayBuffer(
+    await crypto.subtle.encrypt({ name: "AES-GCM", iv: nonce }, cek, record),
+  );
 
   // RFC 8188 §2.1 header: salt(16) | rs(4 BE) | idlen(1) | keyid(idlen).
   const rs = bytes(4);
@@ -207,7 +278,9 @@ export async function sendPush(
   const plaintextRaw =
     payload instanceof Uint8Array
       ? payload
-      : enc.encode(typeof payload === "string" ? payload : JSON.stringify(payload));
+      : enc.encode(
+          typeof payload === "string" ? payload : JSON.stringify(payload),
+        );
   const plaintext = bytes(plaintextRaw.length);
   plaintext.set(plaintextRaw);
 
@@ -236,12 +309,22 @@ export async function sendPush(
  * Generate a fresh VAPID keypair. Run this once and store the strings in
  * Worker secrets (e.g. `wrangler secret put VAPID_PUBLIC_KEY`).
  */
-export async function generateVapidKeyPair(): Promise<{ publicKey: string; privateKey: string }> {
-  const kp = (await crypto.subtle.generateKey({ name: "ECDH", namedCurve: "P-256" }, true, [
-    "deriveBits",
-  ])) as CryptoKeyPair;
-  const pub = fromArrayBuffer((await crypto.subtle.exportKey("raw", kp.publicKey)) as ArrayBuffer);
-  const jwk = (await crypto.subtle.exportKey("jwk", kp.privateKey)) as JsonWebKey;
+export async function generateVapidKeyPair(): Promise<{
+  publicKey: string;
+  privateKey: string;
+}> {
+  const kp = (await crypto.subtle.generateKey(
+    { name: "ECDH", namedCurve: "P-256" },
+    true,
+    ["deriveBits"],
+  )) as CryptoKeyPair;
+  const pub = fromArrayBuffer(
+    (await crypto.subtle.exportKey("raw", kp.publicKey)) as ArrayBuffer,
+  );
+  const jwk = (await crypto.subtle.exportKey(
+    "jwk",
+    kp.privateKey,
+  )) as JsonWebKey;
   if (!jwk.d) throw new Error("missing d in exported JWK");
   return {
     publicKey: b64uEncode(pub),
