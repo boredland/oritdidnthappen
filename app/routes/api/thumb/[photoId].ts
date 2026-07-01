@@ -65,6 +65,7 @@ export default createRoute(async (c) => {
     // shared-stream race), then store and serve identical bytes. Only real,
     // successful images reach this point — never a placeholder or error.
     const bytes = await res.arrayBuffer();
+    if (bytes.byteLength === 0) return placeholder();
     const headers = {
       "Content-Type": res.headers.get("Content-Type") ?? "image/jpeg",
       "Cache-Control": "public, max-age=86400",
