@@ -806,7 +806,7 @@ export default function GuestApp({
                 onClick={() => videoInput.current?.click()}
                 class="mt-3 flex w-full items-center justify-center gap-2 border border-charcoal py-3 text-sm uppercase tracking-widest text-charcoal transition-colors hover:bg-charcoal hover:text-ivory"
               >
-                <VideoIcon size={18} /> Record a video
+                <VideoIcon size={18} class="" /> Record a video
               </button>
             </>
           )}
