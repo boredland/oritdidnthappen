@@ -194,7 +194,7 @@ export const POST = createRoute(async (c) => {
     }
 
     c.executionCtx.waitUntil(
-      notifyNewPhotos(c.env, event, 1, guest.username, id),
+      notifyNewPhotos(c.env, event, 1, guest.username, id, kind),
     );
     return c.json({
       photo: {

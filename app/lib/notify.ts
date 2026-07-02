@@ -13,7 +13,7 @@ function vapidFromEnv(env: Bindings): VapidKeys | null {
 }
 
 /**
- * Notify everyone subscribed to an event that new photos arrived. Best-effort:
+ * Notify everyone subscribed to an event that new media arrived. Best-effort:
  * meant to run inside `ctx.waitUntil` so it never blocks the upload response.
  * Prunes subscriptions the push service reports as gone (410/404).
  */
@@ -23,6 +23,7 @@ export async function notifyNewPhotos(
   count: number,
   uploader: string,
   photoId: string,
+  kind: "image" | "video",
 ): Promise<void> {
   const vapid = vapidFromEnv(env);
   if (!vapid) return;
@@ -30,10 +31,13 @@ export async function notifyNewPhotos(
   const subs = await getEventSubscriptions(env.DB, event.id);
   if (subs.length === 0) return;
 
+  // Single upload names the medium ("a photo" / "a video"); a batch stays
+  // generic since it could mix photos and videos.
+  const noun = kind === "video" ? "video" : "photo";
   const body =
     count === 1
-      ? `${uploader} added a photo.`
-      : `${uploader} added ${count} photos.`;
+      ? `${uploader} added a ${noun}.`
+      : `${uploader} added ${count} ${noun}s.`;
   const payload = JSON.stringify({
     title: event.title,
     body,
