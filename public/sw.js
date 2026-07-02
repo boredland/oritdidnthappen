@@ -6,7 +6,10 @@ const SHELL = ["/", "/logo.svg", "/manifest.webmanifest"];
 
 self.addEventListener("install", (event) => {
   event.waitUntil(
-    caches.open(CACHE).then((c) => c.addAll(SHELL)).then(() => self.skipWaiting()),
+    caches
+      .open(CACHE)
+      .then((c) => c.addAll(SHELL))
+      .then(() => self.skipWaiting()),
   );
 });
 
@@ -15,7 +18,9 @@ self.addEventListener("activate", (event) => {
     caches
       .keys()
       .then((keys) =>
-        Promise.all(keys.filter((k) => k !== CACHE).map((k) => caches.delete(k))),
+        Promise.all(
+          keys.filter((k) => k !== CACHE).map((k) => caches.delete(k)),
+        ),
       )
       .then(() => self.clients.claim()),
   );
@@ -52,56 +57,77 @@ self.addEventListener("fetch", (event) => {
 });
 
 function urlBase64ToUint8Array(base64) {
-  var padding = "=".repeat((4 - (base64.length % 4)) % 4);
-  var b64 = (base64 + padding).replace(/-/g, "+").replace(/_/g, "/");
-  var raw = atob(b64);
-  var out = new Uint8Array(raw.length);
-  for (var i = 0; i < raw.length; i++) out[i] = raw.charCodeAt(i);
+  const padding = "=".repeat((4 - (base64.length % 4)) % 4);
+  const b64 = (base64 + padding).replace(/-/g, "+").replace(/_/g, "/");
+  const raw = atob(b64);
+  const out = new Uint8Array(raw.length);
+  for (let i = 0; i < raw.length; i++) out[i] = raw.charCodeAt(i);
   return out;
 }
 
-self.addEventListener("push", function (event) {
-  var data = {};
+self.addEventListener("push", (event) => {
+  let data = {};
   try {
     data = event.data ? event.data.json() : {};
   } catch (_) {}
-  var title = data.title || "or it didn't happen";
-  var tag = data.tag || "new-photos";
+  const title = data.title || "or it didn't happen";
+  const tag = data.tag || "new-photos";
   event.waitUntil(
-    (async function () {
+    (async () => {
+      // Nudge any open gallery for this event to refresh immediately, BEFORE
+      // (and independent of) the notification — a missing notification
+      // permission or a showNotification failure must never suppress the live
+      // refresh. Event id is carried in the tag ("event-<id>").
+      const eventId = tag.indexOf("event-") === 0 ? tag.slice(6) : null;
+      if (eventId) {
+        try {
+          const windows = await self.clients.matchAll({
+            type: "window",
+            includeUncontrolled: true,
+          });
+          for (const win of windows) {
+            win.postMessage({ type: "photos-updated", eventId: eventId });
+          }
+        } catch (_) {}
+      }
+
       // Collapse repeat pushes for the same event into one notification, but
       // keep the FIRST photo's url so a click opens the earliest one the user
       // was notified about — not whichever arrived last.
-      var url = data.url || "/";
+      let url = data.url || "/";
       try {
-        var existing = await self.registration.getNotifications({ tag: tag });
-        if (existing[0] && existing[0].data && existing[0].data.url) {
+        const existing = await self.registration.getNotifications({ tag: tag });
+        if (existing[0]?.data?.url) {
           url = existing[0].data.url;
         }
       } catch (_) {}
-      await self.registration.showNotification(title, {
-        body: data.body || "New photos were added.",
-        icon: data.icon || "/icon-192.png",
-        badge: data.badge || "/icon-192.png",
-        tag: tag,
-        renotify: true,
-        data: { url: url },
-      });
+      try {
+        await self.registration.showNotification(title, {
+          body: data.body || "New photos were added.",
+          icon: data.icon || "/icon-192.png",
+          badge: data.badge || "/icon-192.png",
+          tag: tag,
+          renotify: true,
+          data: { url: url },
+        });
+      } catch (_) {
+        /* no notification permission (or platform blocked it) — the live
+           refresh above already ran, so an open gallery still updates. */
+      }
     })(),
   );
 });
 
-self.addEventListener("notificationclick", function (event) {
+self.addEventListener("notificationclick", (event) => {
   event.notification.close();
-  var target = (event.notification.data && event.notification.data.url) || "/";
+  const target = event.notification.data?.url || "/";
   event.waitUntil(
     self.clients
       .matchAll({ type: "window", includeUncontrolled: true })
-      .then(function (clients) {
-        for (var i = 0; i < clients.length; i++) {
-          var c = clients[i];
+      .then((clients) => {
+        for (const c of clients) {
           if (new URL(c.url).origin === self.location.origin && "focus" in c) {
-            c.navigate(target).catch(function () {});
+            c.navigate(target).catch(() => {});
             return c.focus();
           }
         }
@@ -111,30 +137,30 @@ self.addEventListener("notificationclick", function (event) {
 });
 
 // Re-subscribe transparently if the browser rotates the push endpoint.
-self.addEventListener("pushsubscriptionchange", function (event) {
+self.addEventListener("pushsubscriptionchange", (event) => {
   event.waitUntil(
-    (async function () {
+    (async () => {
       try {
-        var keyRes = await fetch("/api/push/key");
+        const keyRes = await fetch("/api/push/key");
         if (!keyRes.ok) return;
-        var key = (await keyRes.json()).publicKey;
-        var newSub = await self.registration.pushManager.subscribe({
+        const key = (await keyRes.json()).publicKey;
+        const newSub = await self.registration.pushManager.subscribe({
           userVisibleOnly: true,
           applicationServerKey: urlBase64ToUint8Array(key),
         });
         if (event.oldSubscription) {
-          var meRes = await fetch(
+          const meRes = await fetch(
             "/api/push/migrate?endpoint=" +
               encodeURIComponent(event.oldSubscription.endpoint),
           );
           if (meRes.ok) {
-            var events = (await meRes.json()).events || [];
-            for (var i = 0; i < events.length; i++) {
+            const events = (await meRes.json()).events || [];
+            for (const eventCode of events) {
               await fetch("/api/push/subscribe", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
-                  eventCode: events[i],
+                  eventCode: eventCode,
                   subscription: newSub.toJSON(),
                 }),
               });

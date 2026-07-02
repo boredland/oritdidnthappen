@@ -297,13 +297,11 @@ export default function GuestApp({
     [code, storageKey],
   );
 
-  // Poll for photos uploaded by other guests; pause when tab is hidden.
-  useEffect(() => {
-    if (closed) return;
-    let timer: number | undefined;
-
-    const poll = async () => {
-      if (document.hidden) return;
+  // A single poll for photos uploaded by other guests. `force` bypasses the
+  // hidden-tab guard for an on-demand refresh (e.g. a push just arrived).
+  const poll = useCallback(
+    async (force = false) => {
+      if (!force && document.hidden) return;
       try {
         const res = await fetch(
           `/api/photos/${code}?since=${sinceRef.current}`,
@@ -325,17 +323,39 @@ export default function GuestApp({
             const seen = new Set(prev.map((p) => p.id));
             const fresh = data.photos.filter((p) => !seen.has(p.id));
             if (fresh.length === 0) return prev;
-            return sortPhotos([...prev, ...fresh], sortRef.current ?? sort);
+            return sortPhotos([...prev, ...fresh], sortRef.current ?? "taken");
           });
         }
       } catch {
         /* transient network error — try again next tick */
       }
-    };
+    },
+    [code],
+  );
 
-    timer = window.setInterval(poll, POLL_MS);
+  // Poll on an interval; pause while the event is closed. Skips work when the
+  // tab is hidden (the poll's own guard) to spare a backgrounded phone.
+  useEffect(() => {
+    if (closed) return;
+    const timer = window.setInterval(() => void poll(), POLL_MS);
     return () => window.clearInterval(timer);
-  }, [code, closed]);
+  }, [closed, poll]);
+
+  // A push notification for THIS event nudges an immediate refresh, so a
+  // foreground gallery updates the instant a photo lands instead of waiting
+  // for the next 10s tick. The service worker broadcasts on every push.
+  useEffect(() => {
+    if (!("serviceWorker" in navigator)) return;
+    const onMessage = (e: MessageEvent) => {
+      const d = e.data;
+      if (d && d.type === "photos-updated" && d.eventId === code) {
+        void poll(true);
+      }
+    };
+    navigator.serviceWorker.addEventListener("message", onMessage);
+    return () =>
+      navigator.serviceWorker.removeEventListener("message", onMessage);
+  }, [code, poll]);
 
   // Warn before navigating away mid-upload: uploads run on this page, so
   // closing it aborts anything in flight (unless Background Fetch took over).
