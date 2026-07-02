@@ -191,13 +191,17 @@ async function unsubscribeFromEvent(code: string): Promise<boolean> {
 
 export default function GuestApp({
   code,
-  closed,
+  closed: initialClosed,
   initialPhotos,
   initialHasMore,
   videosEnabled,
   videoMaxBytes,
   turnstileSiteKey,
 }: Props) {
+  // Closure is reactive: seeded from the server-rendered value, then flipped
+  // live when the poll reports the host closed the event, so an open tab
+  // swaps to the closed state instead of failing uploads with 403s.
+  const [closed, setClosed] = useState(initialClosed);
   const [session, setSession] = useState<Session | null>(null);
   const [regState, setRegState] = useState<"working" | "error">("working");
   const [sort, setSort] = useState<SortMode>("taken");
@@ -309,6 +313,9 @@ export default function GuestApp({
           photos: PhotoItem[];
           closed: boolean;
         };
+        // Host closed the event while this tab was open: swap to the closed
+        // state (hides the uploader) rather than let uploads 403.
+        if (data.closed) setClosed(true);
         if (data.photos.length) {
           sinceRef.current = data.photos.reduce(
             (max, p) => Math.max(max, p.createdAt),

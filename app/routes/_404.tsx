@@ -1,6 +1,20 @@
 import type { NotFoundHandler } from "hono";
 
 const handler: NotFoundHandler = (c) => {
+  // HonoX's not-found middleware replaces the body of ANY 404 response with
+  // this handler's output — so a route's own `c.json({ error }, 404)` would
+  // otherwise be rewritten to the HTML page below, breaking clients that call
+  // res.json(). Keep the whole /api surface speaking JSON.
+  if (c.req.path.startsWith("/api/")) {
+    // At rewrite time c.res still holds the route's original JSON error; keep
+    // its specific message ("Unknown event", "Unknown photo", …) intact.
+    const existing = c.res;
+    if (existing?.headers.get("content-type")?.includes("application/json")) {
+      return existing;
+    }
+    return c.json({ error: "Not found" }, 404);
+  }
+
   return c.render(
     <section class="max-w-2xl mx-auto px-6 py-32 text-center">
       <p class="font-heading text-7xl font-light text-sand">404</p>

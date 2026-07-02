@@ -20,6 +20,7 @@ export const POST = createRoute(async (c) => {
         title={title}
         email={email}
         folder={folderInput}
+        provider={provider}
       />,
       { title: "Create event" },
     );
@@ -31,6 +32,7 @@ export const POST = createRoute(async (c) => {
         title={title}
         email={email}
         folder={folderInput}
+        provider={provider}
       />,
       { title: "Create event" },
     );
@@ -67,11 +69,13 @@ function FormPage({
   title = "",
   email = "",
   folder = "",
+  provider = "google_drive",
 }: {
   error?: string;
   title?: string;
   email?: string;
   folder?: string;
+  provider?: string;
 }) {
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -174,7 +178,7 @@ function FormPage({
                 type="radio"
                 name="provider"
                 value="google_drive"
-                checked
+                checked={provider !== "dropbox"}
                 class="sr-only"
               />
               <GoogleIcon />
@@ -185,6 +189,7 @@ function FormPage({
                 type="radio"
                 name="provider"
                 value="dropbox"
+                checked={provider === "dropbox"}
                 class="sr-only"
               />
               <DropboxIcon />

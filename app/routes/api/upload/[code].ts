@@ -154,27 +154,6 @@ export const POST = createRoute(async (c) => {
       return c.json({ error: "Empty body" }, 400);
     }
 
-    // Dedup: a streamed upload commits the bytes before the hash is known, so
-    // a duplicate is caught after upload — delete the redundant cloud copy
-    // (best effort) and return the row that already holds these bytes.
-    const existing = await getPhotoByHash(c.env.DB, event.id, hashHex);
-    if (existing) {
-      try {
-        await provider.deleteFile(accessToken, fileRef);
-      } catch {
-        /* orphan cloud file; autorename already avoided a name clash */
-      }
-      return c.json({
-        photo: {
-          id: existing.id,
-          username: guest.username,
-          createdAt: existing.created_at,
-          takenAt: existing.taken_at,
-          kind: existing.mime_type.startsWith("video/") ? "video" : "image",
-        } satisfies Item,
-      });
-    }
-
     const id = generateId(16);
     const createdAt = await addPhoto(c.env.DB, {
       id,
@@ -188,6 +167,32 @@ export const POST = createRoute(async (c) => {
       content_hash: hashHex,
       poster_ref: null,
     });
+
+    // Dedup: a null createdAt means these exact bytes already live in this
+    // event — either a prior upload or a concurrent identical one that won the
+    // atomic ON CONFLICT race. Drop the redundant cloud copy we just streamed
+    // (best effort) and return the row that already holds the bytes.
+    if (createdAt === null) {
+      try {
+        await provider.deleteFile(accessToken, fileRef);
+      } catch {
+        /* orphan cloud file; autorename already avoided a name clash */
+      }
+      const existing = await getPhotoByHash(c.env.DB, event.id, hashHex);
+      if (existing) {
+        return c.json({
+          photo: {
+            id: existing.id,
+            username: guest.username,
+            createdAt: existing.created_at,
+            takenAt: existing.taken_at,
+            kind: existing.mime_type.startsWith("video/") ? "video" : "image",
+          } satisfies Item,
+        });
+      }
+      return c.json({ error: "Upload failed" }, 500);
+    }
+
     c.executionCtx.waitUntil(
       notifyNewPhotos(c.env, event, 1, guest.username, id),
     );

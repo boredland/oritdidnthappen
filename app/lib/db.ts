@@ -166,17 +166,25 @@ export async function isUsernameTaken(
   return row !== null;
 }
 
+/**
+ * Insert a guest, returning false when the `(event_id, username)` pair is
+ * already taken. `ON CONFLICT DO NOTHING` makes this atomic: two guests racing
+ * for the same name can't both win, and the loser gets a clean false instead
+ * of a thrown UNIQUE-constraint error.
+ */
 export async function createGuest(
   db: D1Database,
   g: { id: string; event_id: string; username: string; session_token: string },
-): Promise<void> {
-  await db
+): Promise<boolean> {
+  const res = await db
     .prepare(
       `INSERT INTO guests (id, event_id, username, session_token)
-       VALUES (?, ?, ?, ?)`,
+       VALUES (?, ?, ?, ?)
+       ON CONFLICT(event_id, username) DO NOTHING`,
     )
     .bind(g.id, g.event_id, g.username, g.session_token)
     .run();
+  return (res.meta?.changes ?? 0) > 0;
 }
 
 export async function getGuestBySession(
@@ -215,12 +223,17 @@ export async function addPhoto(
     content_hash: string;
     poster_ref: string | null;
   },
-): Promise<number> {
+): Promise<number | null> {
+  // ON CONFLICT against the partial unique index (event_id, content_hash)
+  // makes dedup atomic: a concurrent identical upload can't insert a second
+  // row. On conflict no row is inserted and RETURNING yields nothing, so a
+  // null result tells the caller "a duplicate already won — go read it".
   const row = await db
     .prepare(
       `INSERT INTO photos
          (id, event_id, guest_id, file_ref, filename, mime_type, size_bytes, taken_at, content_hash, poster_ref)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+       ON CONFLICT(event_id, content_hash) WHERE content_hash IS NOT NULL DO NOTHING
        RETURNING created_at`,
     )
     .bind(
@@ -236,7 +249,7 @@ export async function addPhoto(
       p.poster_ref,
     )
     .first<{ created_at: number }>();
-  return row?.created_at ?? Math.floor(Date.now() / 1000);
+  return row?.created_at ?? null;
 }
 
 /**
