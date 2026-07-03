@@ -1,3 +1,4 @@
+import { downloadZip } from "client-zip";
 import { useCallback, useEffect, useRef, useState } from "hono/jsx";
 import encodeQR from "qr";
 import { readTakenAt } from "../lib/exif";
@@ -216,6 +217,7 @@ export default function GuestApp({
   const [presentFromId, setPresentFromId] = useState<string | null>(null);
   const [push, setPush] = useState<PushState>("idle");
   const [showQr, setShowQr] = useState(false);
+  const [downloading, setDownloading] = useState(false);
   const [hasMore, setHasMore] = useState(initialHasMore);
   const [loadingMore, setLoadingMore] = useState(false);
   const loadMoreSentinel = useRef<HTMLDivElement | null>(null);
@@ -702,6 +704,55 @@ export default function GuestApp({
     [code],
   );
 
+  // Zip the whole gallery (originals, photos + videos) into one client-built
+  // archive and save it. Pages the photos API to exhaustion for the id list,
+  // then streams each item's original bytes through client-zip lazily — one
+  // file in flight, so memory stays flat regardless of gallery size.
+  const downloadAll = useCallback(async () => {
+    setDownloading(true);
+    try {
+      const ids: string[] = [];
+      let cursor: string | null = null;
+      for (;;) {
+        const res = await fetch(
+          `/api/photos/${code}?limit=100${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ""}`,
+        );
+        if (!res.ok) throw new Error(`photos page ${res.status}`);
+        const data = (await res.json()) as {
+          photos: { id: string; createdAt: number }[];
+          hasMore: boolean;
+        };
+        for (const p of data.photos) ids.push(p.id);
+        const last = data.photos[data.photos.length - 1];
+        if (!data.hasMore || !last) break;
+        cursor = `${last.createdAt}_${last.id}`;
+      }
+      if (ids.length === 0) {
+        flashMsg("Nothing to download yet.");
+        return;
+      }
+
+      // A single deleted file (404) is skipped, never aborting the archive.
+      async function* entries() {
+        for (const id of ids) {
+          const res = await fetch(`/api/download/${id}`);
+          if (res.ok) yield res;
+        }
+      }
+
+      const blob = await downloadZip(entries()).blob();
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = "gallery.zip";
+      a.click();
+      URL.revokeObjectURL(a.href);
+    } catch {
+      flashMsg("Download failed. Try again.");
+    } finally {
+      setDownloading(false);
+    }
+  }, [code]);
+
   // Detect push support + whether this browser is already subscribed.
   useEffect(() => {
     if (
@@ -848,15 +899,27 @@ export default function GuestApp({
           (both hit the Turnstile-gated /api/register) can render a challenge.
           Empty and invisible until Turnstile draws an interactive challenge. */}
       <div ref={turnstileRef} class="flex justify-center empty:hidden" />
-      {!closed && (
-        <div class="mb-8 flex justify-center">
-          <button
-            type="button"
-            onClick={() => setShowQr(true)}
-            class="inline-flex items-center gap-1.5 border border-charcoal px-5 py-2 text-sm uppercase tracking-widest text-charcoal transition-colors hover:bg-charcoal hover:text-ivory"
-          >
-            <QrIcon /> QR code
-          </button>
+      {(!closed || photos.length > 0) && (
+        <div class="mb-8 flex justify-center gap-3">
+          {!closed && (
+            <button
+              type="button"
+              onClick={() => setShowQr(true)}
+              class="inline-flex items-center gap-1.5 border border-charcoal px-5 py-2 text-sm uppercase tracking-widest text-charcoal transition-colors hover:bg-charcoal hover:text-ivory"
+            >
+              <QrIcon /> QR code
+            </button>
+          )}
+          {photos.length > 0 && (
+            <button
+              type="button"
+              onClick={downloadAll}
+              disabled={downloading}
+              class="inline-flex items-center gap-1.5 border border-charcoal px-5 py-2 text-sm uppercase tracking-widest text-charcoal transition-colors hover:bg-charcoal hover:text-ivory disabled:opacity-50"
+            >
+              {downloading ? "Preparing…" : "Download all"}
+            </button>
+          )}
         </div>
       )}
       {!closed && session && (

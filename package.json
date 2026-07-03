@@ -14,6 +14,7 @@
     "prepare": "lefthook install"
   },
   "dependencies": {
+    "client-zip": "^2.5.0",
     "hono": "^4.12.27",
     "honox": "^0.1.56",
     "qr": "^0.6.0"
