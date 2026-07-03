@@ -280,7 +280,7 @@ describe("GET /event/:code/admin — cookie exchange", () => {
     const setCookie = res.headers.get("Set-Cookie") ?? "";
     expect(setCookie).toContain(`admin_${id}=${adminToken}`);
     expect(setCookie).toContain("HttpOnly");
-    expect(setCookie).toContain("SameSite=Strict");
+    expect(setCookie).toContain("SameSite=Lax");
   });
 
   it("preserves new=1 across the redirect", async () => {

@@ -12,9 +12,12 @@ import type { EventRow } from "./db";
  * later request — page loads and mutations alike — authorizes from that cookie.
  * The cookie holds the PLAINTEXT token, not the hash: each check hashes the
  * cookie and compares to the stored hash, so a stolen DB (hashes only) cannot
- * be forged into a valid cookie. `SameSite=Strict` is the CSRF defense the old
- * body-token provided; the tokened URL keeps working forever as recovery (it
- * just re-sets the cookie), so a cleared cookie never orphans an event.
+ * be forged into a valid cookie. `SameSite=Lax` is the CSRF defense: it still
+ * withholds the cookie on cross-site subresource/POST requests (the vector for
+ * the mutation routes), while allowing it on the top-level OAuth redirect that
+ * lands the host on the admin page — `Strict` broke that legitimate entry. The
+ * tokened URL keeps working forever as recovery (it just re-sets the cookie),
+ * so a cleared cookie never orphans an event.
  */
 
 const COOKIE_MAX_AGE = 60 * 60 * 24 * 365; // 1 year
@@ -39,7 +42,7 @@ export function setAdminCookie(
   setCookie(c, cookieName(eventId), token, {
     httpOnly: true,
     secure: true,
-    sameSite: "Strict",
+    sameSite: "Lax",
     path: "/",
     maxAge: COOKIE_MAX_AGE,
   });
