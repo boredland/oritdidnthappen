@@ -2,7 +2,7 @@ import { jsxRenderer } from "hono/jsx-renderer";
 import { Link, Script } from "honox/server";
 
 export default jsxRenderer(
-  ({ children, title, description, image, noindex, jsonLd }, c) => {
+  ({ children, title, description, image, noindex, jsonLd, bareHeader }, c) => {
     const pageTitle = title
       ? `${title} · or it didn't happen`
       : "or it didn't happen";
@@ -74,23 +74,44 @@ export default jsxRenderer(
           ) : null}
         </head>
         <body class="bg-parchment text-charcoal min-h-screen flex flex-col">
-          <header class="border-b border-sand/40">
-            <div class="max-w-5xl mx-auto px-6 py-6">
-              <a href="/" class="inline-flex items-center gap-3 text-charcoal">
-                <img
-                  src="/logo.svg"
-                  alt=""
-                  width="28"
-                  height="28"
-                  class="shrink-0"
-                />
-                <span class="font-heading text-xl md:text-2xl tracking-[0.15em] uppercase whitespace-nowrap">
-                  or it didn't happen
-                </span>
-              </a>
-            </div>
-          </header>
-          <main class="flex-1">{children}</main>
+          <a
+            href="#main"
+            class="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-50 focus:border focus:border-charcoal focus:bg-parchment focus:px-4 focus:py-2 focus:text-sm"
+          >
+            Skip to content
+          </a>
+          {!bareHeader && (
+            <header class="border-b border-sand/40">
+              <div class="mx-auto flex max-w-5xl items-center justify-between px-6 py-4 md:px-12">
+                <a
+                  href="/"
+                  class="inline-flex items-center gap-2.5 text-charcoal"
+                >
+                  <img
+                    src="/logo.svg"
+                    alt=""
+                    width="24"
+                    height="24"
+                    class="shrink-0"
+                  />
+                  <span class="hidden font-heading text-lg tracking-[0.15em] uppercase whitespace-nowrap sm:inline md:text-xl">
+                    or it didn't happen
+                  </span>
+                </a>
+                {c.req.path !== "/create" && (
+                  <a
+                    href="/create"
+                    class="text-xs uppercase tracking-widest text-charcoal-light hover:text-charcoal transition-colors whitespace-nowrap"
+                  >
+                    Create event
+                  </a>
+                )}
+              </div>
+            </header>
+          )}
+          <main id="main" class="flex-1">
+            {children}
+          </main>
           <footer class="border-t border-sand/40 mt-24">
             <div class="max-w-5xl mx-auto px-6 py-12 text-center text-charcoal-light text-sm tracking-wide">
               <p>

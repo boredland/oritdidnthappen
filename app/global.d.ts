@@ -6,6 +6,11 @@ type Head = {
   image?: string;
   noindex?: boolean;
   jsonLd?: Record<string, unknown>;
+  // Landing opts out of the chrome header: its hero already carries the logo,
+  // wordmark, and tagline, so a second brand bar above it just doubles up. Not
+  // set (thus falsy) everywhere else — including the error/404 boundaries — so
+  // those always keep the header and its home link for orientation.
+  bareHeader?: boolean;
 };
 
 declare module "hono" {

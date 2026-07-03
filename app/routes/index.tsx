@@ -58,7 +58,7 @@ const FAQ: { q: string; a: string }[] = [
 export default createRoute((c) => {
   return c.render(
     <>
-      <section class="grain bg-parchment">
+      <header class="grain bg-parchment">
         <div class="max-w-2xl mx-auto px-6 py-28 md:py-40 text-center relative">
           <img
             src="/logo.svg"
@@ -102,7 +102,7 @@ export default createRoute((c) => {
             <span class="sr-only">See how it works</span>
           </a>
         </div>
-      </section>
+      </header>
 
       <RecentGalleries />
       <section
@@ -174,6 +174,7 @@ export default createRoute((c) => {
       </section>
     </>,
     {
+      bareHeader: true,
       title: "Collect event photos in your own cloud",
       description:
         "Collect photos and videos from everyone straight into your own Google Drive or Dropbox. No app, no login — create an event, share one link, watch the gallery fill up, and play it back as a fullscreen slideshow.",
