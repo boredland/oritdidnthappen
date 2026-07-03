@@ -1,9 +1,9 @@
 import { createRoute } from "honox/factory";
-import { generateId } from "../../../lib/crypto";
+import { generateId, hashToken } from "../../../lib/crypto";
 import {
   addPhoto,
   getEventByCode,
-  getGuestBySession,
+  getGuestBySessionHash,
   getPhotoByHash,
   getPhotoById,
   setPhotoPoster,
@@ -49,7 +49,11 @@ export const POST = createRoute(async (c) => {
   const event = await getEventByCode(c.env.DB, code);
   if (!event) return c.json({ error: "Unknown event" }, 404);
 
-  const guest = await getGuestBySession(c.env.DB, event.id, sessionToken);
+  const guest = await getGuestBySessionHash(
+    c.env.DB,
+    event.id,
+    await hashToken(sessionToken),
+  );
   if (!guest) return c.json({ error: "Invalid session" }, 401);
 
   const now = Math.floor(Date.now() / 1000);
@@ -152,6 +156,18 @@ export const POST = createRoute(async (c) => {
         /* orphan empty cloud file; best effort */
       }
       return c.json({ error: "Empty body" }, 400);
+    }
+
+    // Authoritative size backstop: Content-Length is client-declared and can be
+    // absent (gate saw 0) or understated. Now that the real byte count is known,
+    // enforce the same cap — dropping the over-cap file we just streamed.
+    if (bytes > sizeLimit) {
+      try {
+        await provider.deleteFile(accessToken, fileRef);
+      } catch {
+        /* orphan over-cap cloud file; best effort */
+      }
+      return c.json({ error: "Too large" }, 413);
     }
 
     const id = generateId(16);

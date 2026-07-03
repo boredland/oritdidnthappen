@@ -43,12 +43,10 @@ export const POST = createRoute(async (c) => {
   const folderName = (folderInput || title).slice(0, 100);
 
   const id = generateId(8);
-  const adminToken = generateId(32);
   await createEvent(c.env.DB, {
     id,
     title,
     host_email: email || null,
-    admin_token: adminToken,
     provider,
     folder_name: folderName,
   });

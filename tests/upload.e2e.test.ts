@@ -173,6 +173,42 @@ describe("POST /api/upload/:code — auth & gates", () => {
     // Never reached the provider.
     expect(calls.some((c) => c.url.includes("drive.example"))).toBe(false);
   });
+
+  it("413s when the streamed bytes exceed the cap despite a passing Content-Length", async () => {
+    // Video cap seeded tiny (10 bytes). No Content-Length header, so the
+    // declared-size gate sees 0 and passes; the authoritative post-stream
+    // check on real bytes must catch the overage, drop the cloud file, 413.
+    const { id } = await seedEvent(h, {
+      connected: true,
+      videosEnabled: true,
+      videoMaxBytes: 10,
+    });
+    const guest = await seedGuest(h, id);
+    const res = await h.request(`/api/upload/${id}`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${guest.sessionToken}`,
+        "Content-Type": "video/mp4",
+        "X-Filename": "clip.mp4",
+      },
+      body: "x".repeat(5000), // well over the 10-byte cap
+    });
+    expect(res.status).toBe(413);
+
+    // No row persisted for the over-cap upload.
+    const row = await h.db
+      .prepare("SELECT COUNT(*) AS n FROM photos WHERE event_id = ?")
+      .bind(id)
+      .first<{ n: number }>();
+    expect(row?.n).toBe(0);
+
+    // The orphan cloud file we streamed was deleted (best-effort cleanup).
+    expect(
+      calls.some(
+        (c) => c.method === "DELETE" && c.url.includes("/drive/v3/files/"),
+      ),
+    ).toBe(true);
+  });
 });
 
 describe("POST /api/upload/:code — happy path & dedup", () => {

@@ -16,6 +16,41 @@ export function generateId(len: number): string {
   return out;
 }
 
+/**
+ * Constant-time string equality for authorization tokens. A plain `===`
+ * short-circuits at the first differing byte, leaking match-length via timing;
+ * this always compares the full width. Unequal lengths still run a fixed pass
+ * (against `a`) so timing doesn't reveal the expected length either.
+ */
+export function timingSafeEqual(a: string, b: string): boolean {
+  const enc = new TextEncoder();
+  const ab = enc.encode(a);
+  const bb = enc.encode(b);
+  const len = ab.length;
+  let diff = ab.length ^ bb.length;
+  for (let i = 0; i < len; i++) {
+    diff |= ab[i] ^ (bb[i] ?? 0);
+  }
+  return diff === 0;
+}
+
+/**
+ * One-way SHA-256 (hex) of a bearer token, for at-rest storage. These tokens
+ * are 192-bit random values (`generateId(32)`), not low-entropy passwords, so
+ * a plain fast hash with no salt is sufficient — there is nothing to
+ * brute-force, and an unsalted digest keeps the value directly indexable for
+ * lookup. A DB thief sees only hashes, useless against the live app.
+ */
+export async function hashToken(token: string): Promise<string> {
+  const encoded = new TextEncoder().encode(token);
+  const data = new Uint8Array(new ArrayBuffer(encoded.length));
+  data.set(encoded);
+  const digest = await crypto.subtle.digest("SHA-256", data);
+  return Array.from(new Uint8Array(digest))
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("");
+}
+
 function bytesToBase64(bytes: Uint8Array): string {
   let binary = "";
   for (let i = 0; i < bytes.length; i++) {

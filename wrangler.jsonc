@@ -17,6 +17,9 @@
   ],
   "send_email": [{ "name": "EMAIL" }],
   "routes": [{ "pattern": "oritdidnthappen.pics", "custom_domain": true }],
+  "triggers": {
+    "crons": ["0 4 * * *"]
+  },
   "observability": {
     "enabled": true
   },

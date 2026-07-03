@@ -30,12 +30,17 @@ describe("POST /api/register", () => {
     expect(body.username).toMatch(/^[a-z]+-[a-z]+/);
     expect(body.sessionToken).toHaveLength(32);
 
-    // The guest is persisted.
+    // The guest is persisted, and the session token is stored HASHED — the
+    // plaintext returned to the client never appears in the DB.
     const guest = await h.db
-      .prepare("SELECT * FROM guests WHERE event_id = ? AND username = ?")
+      .prepare(
+        "SELECT session_token_hash FROM guests WHERE event_id = ? AND username = ?",
+      )
       .bind(id, body.username as string)
-      .first();
+      .first<{ session_token_hash: string }>();
     expect(guest).not.toBeNull();
+    expect(guest?.session_token_hash).not.toBe(body.sessionToken);
+    expect(guest?.session_token_hash).toMatch(/^[0-9a-f]{64}$/);
   });
 
   it("rejects a missing event code with 400", async () => {

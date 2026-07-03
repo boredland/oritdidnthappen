@@ -6,7 +6,6 @@ const VIDEO_MAX_MB = VIDEO_CEILING_BYTES / (1024 * 1024);
 
 interface Props {
   code: string;
-  adminToken: string;
   shareUrl: string;
   closed: boolean;
   videosEnabled: boolean;
@@ -15,7 +14,6 @@ interface Props {
 
 export default function AdminControls({
   code,
-  adminToken,
   shareUrl,
   closed,
   videosEnabled,
@@ -45,7 +43,7 @@ export default function AdminControls({
     const res = await fetch(`/api/event/${code}/close`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ adminToken, closed: !isClosed }),
+      body: JSON.stringify({ closed: !isClosed }),
     });
     setBusy(false);
     if (res.ok) setIsClosed(!isClosed);
@@ -56,7 +54,7 @@ export default function AdminControls({
     const res = await fetch(`/api/event/${code}/delete`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ adminToken }),
+      body: JSON.stringify({}),
     });
     if (res.ok) {
       window.location.href = "/";
@@ -75,7 +73,6 @@ export default function AdminControls({
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        adminToken,
         enabled,
         maxBytes: enabled ? mb * 1024 * 1024 : null,
       }),

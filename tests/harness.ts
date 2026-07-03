@@ -1,7 +1,7 @@
 import { Miniflare } from "miniflare";
 import { vi } from "vitest";
 import type { Bindings } from "../app/global";
-import { encryptToken } from "../app/lib/crypto";
+import { encryptToken, hashToken } from "../app/lib/crypto";
 import type { Provider } from "../app/lib/db";
 import app from "../app/server";
 
@@ -58,6 +58,9 @@ export interface Harness {
   ): Promise<JsonResponse<T>>;
   /** GET and parse the JSON response, typed by the caller. */
   getJson<T>(path: string): Promise<JsonResponse<T>>;
+  /** Await all background promises the app handed to `ctx.waitUntil`, so
+   *  fire-and-forget work (e.g. a not-found row cleanup) is observable. */
+  settleBackground(): Promise<void>;
   dispose(): Promise<void>;
   encrypt(plaintext: string): Promise<string>;
 }
@@ -94,10 +97,13 @@ export async function createHarness(
     VAPID_SUBJECT: "mailto:test@oidh.pics",
   } as unknown as Bindings;
 
+  // Collect background promises so tests can deterministically await
+  // fire-and-forget work instead of racing it with a wall-clock delay.
+  const background: Promise<unknown>[] = [];
   const ctx = {
     waitUntil(p: Promise<unknown>) {
       // Surface async errors instead of swallowing them silently.
-      void Promise.resolve(p).catch(() => {});
+      background.push(Promise.resolve(p).catch(() => {}));
     },
     passThroughOnException() {},
   };
@@ -132,6 +138,14 @@ export async function createHarness(
       const res = await request(path);
       return { status: res.status, body: (await res.json()) as T };
     },
+    async settleBackground() {
+      // Await a snapshot; a settling promise may enqueue more, so drain until
+      // the queue stops growing.
+      while (background.length > 0) {
+        const pending = background.splice(0);
+        await Promise.all(pending);
+      }
+    },
     dispose: () => mf.dispose(),
     encrypt: (plaintext) => encryptToken(plaintext, KEY),
   };
@@ -162,14 +176,14 @@ export async function seedEvent(
   await h.db
     .prepare(
       `INSERT INTO events
-       (id,title,host_email,admin_token,provider,access_token,folder_id,folder_url,expires_at,videos_enabled,video_max_bytes)
+       (id,title,host_email,admin_token_hash,provider,access_token,folder_id,folder_url,expires_at,videos_enabled,video_max_bytes)
        VALUES (?,?,?,?,?,?,?,?,?,?,?)`,
     )
     .bind(
       id,
       opts.title ?? "Test Event",
       opts.hostEmail ?? null,
-      adminToken,
+      await hashToken(adminToken),
       opts.provider ?? "google_drive",
       access,
       opts.connected ? "folder1" : null,
@@ -192,9 +206,9 @@ export async function seedGuest(
   const sessionToken = opts.sessionToken ?? `sess${counter}`;
   await h.db
     .prepare(
-      `INSERT INTO guests (id,event_id,username,session_token) VALUES (?,?,?,?)`,
+      `INSERT INTO guests (id,event_id,username,session_token_hash) VALUES (?,?,?,?)`,
     )
-    .bind(id, eventId, username, sessionToken)
+    .bind(id, eventId, username, await hashToken(sessionToken))
     .run();
   return { id, username, sessionToken };
 }

@@ -1,5 +1,5 @@
 import { createRoute } from "honox/factory";
-import { generateId } from "../../lib/crypto";
+import { generateId, hashToken } from "../../lib/crypto";
 import { createGuest, getEventByCode, isUsernameTaken } from "../../lib/db";
 import { verifyTurnstile } from "../../lib/turnstile";
 import { sanitizeUsername, uniqueUsername } from "../../lib/username";
@@ -30,6 +30,7 @@ export const POST = createRoute(async (c) => {
   }
 
   const sessionToken = generateId(32);
+  const sessionTokenHash = await hashToken(sessionToken);
   if (body.desiredUsername) {
     const clean = sanitizeUsername(body.desiredUsername);
     if (!clean) return c.json({ error: "Invalid username" }, 400);
@@ -37,7 +38,7 @@ export const POST = createRoute(async (c) => {
       id: generateId(16),
       event_id: event.id,
       username: clean,
-      session_token: sessionToken,
+      session_token_hash: sessionTokenHash,
     });
     // A conflict (checked-taken OR a concurrent claim of the same name losing
     // the race) resolves to a clean 409, never a leaked constraint 500.
@@ -56,7 +57,7 @@ export const POST = createRoute(async (c) => {
       id: generateId(16),
       event_id: event.id,
       username,
-      session_token: sessionToken,
+      session_token_hash: sessionTokenHash,
     });
     if (inserted) return c.json({ username, sessionToken });
   }

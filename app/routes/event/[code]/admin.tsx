@@ -2,6 +2,8 @@ import { createRoute } from "honox/factory";
 import AdminControls from "../../../islands/AdminControls";
 import AdminGallery from "../../../islands/AdminGallery";
 import GalleryTracker from "../../../islands/GalleryTracker";
+import { hasAdminCookie, setAdminCookie } from "../../../lib/admin-auth";
+import { hashToken, timingSafeEqual } from "../../../lib/crypto";
 import {
   countGuests,
   countPhotos,
@@ -17,14 +19,30 @@ export default createRoute(async (c) => {
 
   const event = await getEventByCode(c.env.DB, code);
   if (!event) return c.notFound();
-  if (!token || token !== event.admin_token) {
+
+  // Exchange a valid `?token=` for an HttpOnly cookie, then redirect to the
+  // clean URL so the credential leaves the address bar (and history/Referer).
+  // The tokened link keeps working forever — it just re-sets the cookie.
+  if (
+    token &&
+    event.admin_token_hash != null &&
+    timingSafeEqual(await hashToken(token), event.admin_token_hash)
+  ) {
+    setAdminCookie(c, event.id, token);
+    const dest = `/event/${event.id}/admin${isNew ? "?new=1" : ""}`;
+    return c.redirect(dest, 303);
+  }
+
+  // No usable token in the URL: authorize from the cookie set on a prior visit.
+  if (!(await hasAdminCookie(c, event))) {
     return c.render(
       <section class="max-w-lg mx-auto px-6 py-32 text-center">
         <h1 class="font-heading text-3xl font-light tracking-wide">
           Invalid admin link
         </h1>
         <p class="text-charcoal-light mt-4">
-          This link is missing its access token or it's incorrect.
+          This link is missing its access token or it's incorrect. Open the
+          original admin link from your email to sign back in.
         </p>
       </section>,
       { title: "Admin", noindex: true },
@@ -55,12 +73,12 @@ export default createRoute(async (c) => {
         code={event.id}
         title={event.title}
         viewRole="admin"
-        url={`/event/${event.id}/admin?token=${token}`}
+        url={`/event/${event.id}/admin`}
       />
       {isNew && (
         <div class="border border-charcoal bg-parchment-dark px-5 py-4 mb-10 text-sm">
-          Your event is ready. Save this page — the link in the address bar is
-          your admin access.
+          Your event is ready — this device now stays signed in. Keep the admin
+          link from your email to sign in from another device.
           {event.host_email ? " We've also emailed it to you." : ""}
         </div>
       )}
@@ -80,7 +98,6 @@ export default createRoute(async (c) => {
 
       <AdminControls
         code={event.id}
-        adminToken={event.admin_token}
         shareUrl={shareUrl}
         closed={closed}
         videosEnabled={event.videos_enabled === 1}
@@ -110,7 +127,6 @@ export default createRoute(async (c) => {
         </p>
         <AdminGallery
           code={event.id}
-          adminToken={event.admin_token}
           initialPhotos={photos.map((p) => ({
             id: p.id,
             username: p.username,

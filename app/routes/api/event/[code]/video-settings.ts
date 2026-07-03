@@ -1,4 +1,5 @@
 import { createRoute } from "honox/factory";
+import { isAuthorizedAdmin } from "../../../../lib/admin-auth";
 import { getEventByCode, setEventVideoSettings } from "../../../../lib/db";
 import {
   VIDEO_CEILING_BYTES,
@@ -9,14 +10,13 @@ export const POST = createRoute(async (c) => {
   const code = c.req.param("code");
   if (!code) return c.json({ error: "Missing code" }, 400);
   const body = await c.req.json<{
-    adminToken?: string;
     enabled?: boolean;
     maxBytes?: number | null;
   }>();
 
   const event = await getEventByCode(c.env.DB, code);
   if (!event) return c.json({ error: "Unknown event" }, 404);
-  if (!body.adminToken || body.adminToken !== event.admin_token) {
+  if (!(await isAuthorizedAdmin(c, event))) {
     return c.json({ error: "Forbidden" }, 403);
   }
 

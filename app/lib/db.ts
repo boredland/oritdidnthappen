@@ -4,7 +4,7 @@ export interface EventRow {
   id: string;
   title: string;
   host_email: string | null;
-  admin_token: string;
+  admin_token_hash: string | null;
   provider: Provider;
   access_token: string | null;
   refresh_token: string | null;
@@ -23,7 +23,7 @@ export interface GuestRow {
   id: string;
   event_id: string;
   username: string;
-  session_token: string;
+  session_token_hash: string;
   created_at: number;
 }
 
@@ -49,7 +49,6 @@ export interface NewEvent {
   id: string;
   title: string;
   host_email: string | null;
-  admin_token: string;
   provider: Provider;
   folder_name: string;
 }
@@ -57,10 +56,10 @@ export interface NewEvent {
 export async function createEvent(db: D1Database, e: NewEvent): Promise<void> {
   await db
     .prepare(
-      `INSERT INTO events (id, title, host_email, admin_token, provider, folder_name)
-       VALUES (?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO events (id, title, host_email, provider, folder_name)
+       VALUES (?, ?, ?, ?, ?)`,
     )
-    .bind(e.id, e.title, e.host_email, e.admin_token, e.provider, e.folder_name)
+    .bind(e.id, e.title, e.host_email, e.provider, e.folder_name)
     .run();
 }
 
@@ -71,16 +70,6 @@ export async function getEventByCode(
   return db
     .prepare(`SELECT * FROM events WHERE id = ?`)
     .bind(code)
-    .first<EventRow>();
-}
-
-export async function getEventByAdminToken(
-  db: D1Database,
-  token: string,
-): Promise<EventRow | null> {
-  return db
-    .prepare(`SELECT * FROM events WHERE admin_token = ?`)
-    .bind(token)
     .first<EventRow>();
 }
 
@@ -111,6 +100,18 @@ export async function setEventStorage(
       data.folder_url,
       id,
     )
+    .run();
+}
+
+/** Store the admin token's hash after the OAuth callback mints the token. */
+export async function setEventAdminTokenHash(
+  db: D1Database,
+  id: string,
+  adminTokenHash: string,
+): Promise<void> {
+  await db
+    .prepare(`UPDATE events SET admin_token_hash = ? WHERE id = ?`)
+    .bind(adminTokenHash, id)
     .run();
 }
 
@@ -174,27 +175,34 @@ export async function isUsernameTaken(
  */
 export async function createGuest(
   db: D1Database,
-  g: { id: string; event_id: string; username: string; session_token: string },
+  g: {
+    id: string;
+    event_id: string;
+    username: string;
+    session_token_hash: string;
+  },
 ): Promise<boolean> {
   const res = await db
     .prepare(
-      `INSERT INTO guests (id, event_id, username, session_token)
+      `INSERT INTO guests (id, event_id, username, session_token_hash)
        VALUES (?, ?, ?, ?)
        ON CONFLICT(event_id, username) DO NOTHING`,
     )
-    .bind(g.id, g.event_id, g.username, g.session_token)
+    .bind(g.id, g.event_id, g.username, g.session_token_hash)
     .run();
   return (res.meta?.changes ?? 0) > 0;
 }
 
-export async function getGuestBySession(
+export async function getGuestBySessionHash(
   db: D1Database,
   eventId: string,
-  sessionToken: string,
+  sessionTokenHash: string,
 ): Promise<GuestRow | null> {
   return db
-    .prepare(`SELECT * FROM guests WHERE event_id = ? AND session_token = ?`)
-    .bind(eventId, sessionToken)
+    .prepare(
+      `SELECT * FROM guests WHERE event_id = ? AND session_token_hash = ?`,
+    )
+    .bind(eventId, sessionTokenHash)
     .first<GuestRow>();
 }
 
@@ -531,5 +539,55 @@ export async function deleteEvent(
       .bind(eventId),
     db.prepare(`DELETE FROM guests WHERE event_id = ?`).bind(eventId),
     db.prepare(`DELETE FROM events WHERE id = ?`).bind(eventId),
+  ]);
+}
+
+/**
+ * Event ids past their retention window: closed at least `closedGraceSecs` ago,
+ * OR created at least `maxAgeSecs` ago regardless of state (bounds token
+ * lifetime for events a host connected but abandoned). `now` is unix seconds.
+ */
+export async function getExpiredEventIds(
+  db: D1Database,
+  now: number,
+  closedGraceSecs: number,
+  maxAgeSecs: number,
+): Promise<string[]> {
+  const { results } = await db
+    .prepare(
+      `SELECT id FROM events
+       WHERE (expires_at IS NOT NULL AND expires_at <= ?)
+          OR created_at <= ?`,
+    )
+    .bind(now - closedGraceSecs, now - maxAgeSecs)
+    .all<{ id: string }>();
+  return (results ?? []).map((r) => r.id);
+}
+
+/**
+ * Delete many events and all their child rows in one batch. Children first
+ * (D1 has no FK cascade), events last. No-op on an empty list.
+ */
+export async function deleteEvents(
+  db: D1Database,
+  eventIds: string[],
+): Promise<void> {
+  if (eventIds.length === 0) return;
+  const placeholders = eventIds.map(() => "?").join(", ");
+  await db.batch([
+    db
+      .prepare(`DELETE FROM photos WHERE event_id IN (${placeholders})`)
+      .bind(...eventIds),
+    db
+      .prepare(
+        `DELETE FROM push_subscriptions WHERE event_id IN (${placeholders})`,
+      )
+      .bind(...eventIds),
+    db
+      .prepare(`DELETE FROM guests WHERE event_id IN (${placeholders})`)
+      .bind(...eventIds),
+    db
+      .prepare(`DELETE FROM events WHERE id IN (${placeholders})`)
+      .bind(...eventIds),
   ]);
 }

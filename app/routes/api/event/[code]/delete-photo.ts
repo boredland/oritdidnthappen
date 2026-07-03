@@ -1,4 +1,5 @@
 import { createRoute } from "honox/factory";
+import { isAuthorizedAdmin } from "../../../../lib/admin-auth";
 import {
   deletePhoto,
   getEventByCode,
@@ -10,11 +11,11 @@ import { ensureValidToken, getProvider } from "../../../../lib/storage";
 export const POST = createRoute(async (c) => {
   const code = c.req.param("code");
   if (!code) return c.json({ error: "Missing code" }, 400);
-  const body = await c.req.json<{ adminToken?: string; photoId?: string }>();
+  const body = await c.req.json<{ photoId?: string }>();
 
   const event = await getEventByCode(c.env.DB, code);
   if (!event) return c.json({ error: "Unknown event" }, 404);
-  if (!body.adminToken || body.adminToken !== event.admin_token) {
+  if (!(await isAuthorizedAdmin(c, event))) {
     return c.json({ error: "Forbidden" }, 403);
   }
   if (!body.photoId) return c.json({ error: "Missing photoId" }, 400);

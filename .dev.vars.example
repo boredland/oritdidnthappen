@@ -8,3 +8,12 @@ ENCRYPTION_KEY=
 # Email uses the Cloudflare Email Sending binding (EMAIL) — no key needed.
 EMAIL_FROM=or it didn't happen <feedback@oritdidnthappen.pics>
 BASE_URL=http://localhost:5173
+# Cloudflare Turnstile (participant registration challenge). Unset secret →
+# registration skips the challenge so local dev works without keys.
+TURNSTILE_SITE_KEY=
+TURNSTILE_SECRET_KEY=
+# Web Push (VAPID). Generate a keypair via generateVapidKeyPair() in app/lib/push.ts.
+# Unset → the "Notify me" control is hidden.
+VAPID_PUBLIC_KEY=
+VAPID_PRIVATE_KEY=
+VAPID_SUBJECT=mailto:you@example.com

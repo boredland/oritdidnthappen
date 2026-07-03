@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { decryptToken, encryptToken, generateId } from "./crypto";
+import {
+  decryptToken,
+  encryptToken,
+  generateId,
+  timingSafeEqual,
+} from "./crypto";
 
 const KEY = "0".repeat(64); // 32 zero bytes
 const KEY2 = "f".repeat(64);
@@ -88,5 +93,31 @@ describe("encryptToken / decryptToken", () => {
     await expect(encryptToken("x", "0".repeat(63))).rejects.toThrow(
       /even-length/,
     );
+  });
+});
+
+describe("timingSafeEqual", () => {
+  it("returns true for identical strings", () => {
+    expect(timingSafeEqual("admintoken-abc123", "admintoken-abc123")).toBe(
+      true,
+    );
+  });
+
+  it("returns false for same-length differing strings", () => {
+    expect(timingSafeEqual("aaaaaaaa", "aaaaaaab")).toBe(false);
+  });
+
+  it("returns false for different-length strings", () => {
+    expect(timingSafeEqual("short", "longer-value")).toBe(false);
+    expect(timingSafeEqual("longer-value", "short")).toBe(false);
+  });
+
+  it("treats two empty strings as equal", () => {
+    expect(timingSafeEqual("", "")).toBe(true);
+  });
+
+  it("is correct for multi-byte unicode", () => {
+    expect(timingSafeEqual("café☕", "café☕")).toBe(true);
+    expect(timingSafeEqual("café☕", "cafe☕")).toBe(false);
   });
 });

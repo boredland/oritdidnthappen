@@ -8,14 +8,12 @@ export interface AdminPhoto {
 
 interface Props {
   code: string;
-  adminToken: string;
   initialPhotos: AdminPhoto[];
   initialCover: string | null;
 }
 
 export default function AdminGallery({
   code,
-  adminToken,
   initialPhotos,
   initialCover,
 }: Props) {
@@ -37,7 +35,7 @@ export default function AdminGallery({
     const res = await fetch(`/api/event/${code}/delete-photo`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ adminToken, photoId }),
+      body: JSON.stringify({ photoId }),
     });
     setBusy(null);
     if (res.ok) {
@@ -55,7 +53,7 @@ export default function AdminGallery({
     const res = await fetch(`/api/event/${code}/cover`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ adminToken, photoId: next }),
+      body: JSON.stringify({ photoId: next }),
     });
     setBusy(null);
     if (res.ok) {

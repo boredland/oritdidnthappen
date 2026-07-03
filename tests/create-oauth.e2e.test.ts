@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { decryptToken } from "../app/lib/crypto";
+import { decryptToken, hashToken } from "../app/lib/crypto";
 import type { Harness } from "./harness";
 import { createHarness, stubFetch } from "./harness";
 
@@ -161,6 +161,18 @@ describe("GET /api/oauth/google — callback", () => {
     expect(
       await decryptToken(row?.refresh_token as string, "0".repeat(64)),
     ).toBe("REFRESH-TOKEN");
+
+    // The admin token from the redirect URL is persisted only as a hash — the
+    // plaintext never lands in the DB, and the stored hash matches it.
+    const urlToken = new URL(loc, "http://localhost").searchParams.get(
+      "token",
+    ) as string;
+    const evt = await h.db
+      .prepare("SELECT admin_token_hash FROM events WHERE id = ?")
+      .bind(eventId)
+      .first<{ admin_token_hash: string }>();
+    expect(evt?.admin_token_hash).not.toBe(urlToken);
+    expect(evt?.admin_token_hash).toBe(await hashToken(urlToken));
   });
 
   it("redirects to /create with an error when the provider returns error=", async () => {

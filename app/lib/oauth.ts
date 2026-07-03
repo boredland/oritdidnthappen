@@ -1,7 +1,7 @@
 import type { Context } from "hono";
-import { encryptToken } from "./crypto";
+import { encryptToken, generateId, hashToken } from "./crypto";
 import type { Provider } from "./db";
-import { getEventByCode, setEventStorage } from "./db";
+import { getEventByCode, setEventAdminTokenHash, setEventStorage } from "./db";
 import { sendAdminLink } from "./email";
 import { getProvider } from "./storage";
 
@@ -59,12 +59,16 @@ export async function handleOAuthCallback(
     return c.redirect(`/create?error=connect_failed`);
   }
 
-  const adminUrl = `${c.env.BASE_URL}/event/${event.id}/admin?token=${event.admin_token}`;
+  // Mint the admin token only now — the sole post-connect place that can email
+  // it. We persist just its hash; the plaintext lives only in this email + the
+  // redirect (which sets the cookie), never at rest.
+  const adminToken = generateId(32);
+  await setEventAdminTokenHash(c.env.DB, event.id, await hashToken(adminToken));
+
+  const adminUrl = `${c.env.BASE_URL}/event/${event.id}/admin?token=${adminToken}`;
   if (event.host_email) {
     await sendAdminLink(c.env, event.host_email, event.title, adminUrl);
   }
 
-  return c.redirect(
-    `/event/${event.id}/admin?token=${event.admin_token}&new=1`,
-  );
+  return c.redirect(`/event/${event.id}/admin?token=${adminToken}&new=1`);
 }
