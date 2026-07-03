@@ -112,9 +112,24 @@ export default function AdminControls({
           href={shareUrl}
           target="_blank"
           rel="noopener noreferrer"
-          class="inline-block mt-3 text-sm underline underline-offset-2 text-charcoal hover:text-taupe"
+          class="mt-4 flex w-full items-center justify-center gap-2 border border-marigold bg-marigold px-6 py-3.5 text-sm uppercase tracking-widest text-charcoal transition-colors hover:bg-marigold-dark hover:border-marigold-dark"
         >
-          View event page ↗
+          Open live gallery
+          <svg
+            width="15"
+            height="15"
+            viewBox="0 0 24 24"
+            fill="none"
+            aria-hidden="true"
+          >
+            <path
+              d="M7 17 17 7M9 7h8v8"
+              stroke="currentColor"
+              stroke-width="1.6"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            />
+          </svg>
         </a>
       </div>
 

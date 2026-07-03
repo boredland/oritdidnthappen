@@ -199,7 +199,7 @@ function FormPage({
         <button
           type="submit"
           disabled={isSubmitting}
-          class="w-full border border-charcoal px-8 py-4 text-sm tracking-widest uppercase hover:bg-charcoal hover:text-ivory transition-colors disabled:opacity-50"
+          class="w-full border border-marigold bg-marigold px-8 py-4 text-sm tracking-widest uppercase text-charcoal transition-colors hover:bg-marigold-dark hover:border-marigold-dark disabled:opacity-50"
         >
           {isSubmitting ? "Connecting…" : "Connect storage"}
         </button>

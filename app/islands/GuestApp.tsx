@@ -948,7 +948,7 @@ export default function GuestApp({
             }}
             class={`border border-dashed py-10 md:py-12 px-6 text-center cursor-pointer transition-colors ${
               dragging
-                ? "border-taupe border-solid bg-parchment-dark"
+                ? "border-marigold border-solid bg-marigold/10"
                 : "border-sand bg-parchment-light hover:bg-parchment-dark"
             }`}
           >
@@ -989,9 +989,9 @@ export default function GuestApp({
           <button
             type="button"
             onClick={() => cameraInput.current?.click()}
-            class="mt-3 flex w-full items-center justify-center gap-2 border border-charcoal bg-charcoal py-3 text-sm uppercase tracking-widest text-ivory transition-colors hover:bg-charcoal-light"
+            class="mt-3 flex w-full items-center justify-center gap-2 border border-marigold bg-marigold py-3 text-sm uppercase tracking-widest text-charcoal transition-colors hover:bg-marigold-dark hover:border-marigold-dark"
           >
-            <CameraIcon size={18} class="text-ivory" /> Take a photo
+            <CameraIcon size={18} class="text-charcoal" /> Take a photo
           </button>
           {videosEnabled && (
             <>
@@ -1072,9 +1072,9 @@ export default function GuestApp({
                     </span>
                     <span>{agg.percent}%</span>
                   </div>
-                  <div class="mt-2 h-0.5 bg-parchment-dark">
+                  <div class="mt-2 h-1 bg-parchment-dark">
                     <div
-                      class="h-0.5 bg-charcoal origin-left transition-transform duration-200 ease-out"
+                      class="h-1 bg-marigold origin-left transition-transform duration-200 ease-out"
                       style={{ transform: `scaleX(${agg.percent / 100})` }}
                     />
                   </div>

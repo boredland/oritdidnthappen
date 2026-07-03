@@ -2,7 +2,11 @@ import { createRoute } from "honox/factory";
 import AdminControls from "../../../islands/AdminControls";
 import AdminGallery from "../../../islands/AdminGallery";
 import GalleryTracker from "../../../islands/GalleryTracker";
-import { hasAdminCookie, setAdminCookie } from "../../../lib/admin-auth";
+import {
+  getAdminToken,
+  hasAdminCookie,
+  setAdminCookie,
+} from "../../../lib/admin-auth";
 import { hashToken, timingSafeEqual } from "../../../lib/crypto";
 import {
   countGuests,
@@ -58,6 +62,13 @@ export default createRoute(async (c) => {
   ]);
 
   const shareUrl = `${c.env.BASE_URL}/event/${event.id}`;
+  // The admin token still lives in the request cookie (plaintext), so we can
+  // hand the host their recovery link back. Only rendered in the one-time
+  // `?new=1` banner below — never on every load — to keep the bearer token out
+  // of the DOM (and out of XSS reach) except at the moment we ask them to save
+  // it. Absent only if the cookie is somehow gone but a valid `?token=` wasn't.
+  const adminToken = getAdminToken(c, event);
+  const adminUrl = adminToken ? `${shareUrl}/admin?token=${adminToken}` : null;
   const created = new Date(event.created_at * 1000).toLocaleDateString(
     "en-US",
     {
@@ -76,10 +87,26 @@ export default createRoute(async (c) => {
         url={`/event/${event.id}/admin`}
       />
       {isNew && (
-        <div class="border border-charcoal bg-parchment-dark px-5 py-4 mb-10 text-sm">
-          Your event is ready — this device now stays signed in. Keep the admin
-          link from your email to sign in from another device.
-          {event.host_email ? " We've also emailed it to you." : ""}
+        <div class="border border-marigold bg-marigold/10 px-5 py-4 mb-10 text-sm">
+          {event.host_email ? (
+            <p>
+              Your event is ready — this device stays signed in, and we've
+              emailed your admin link so you can sign back in from anywhere.
+            </p>
+          ) : (
+            <>
+              <p>
+                Your event is ready — this device stays signed in. To open the
+                admin page from another device, save this link. It's the only
+                way back in, so keep it private:
+              </p>
+              {adminUrl && (
+                <code class="mt-3 block overflow-x-auto whitespace-nowrap border border-sand bg-parchment-light px-3 py-2 text-xs text-charcoal">
+                  {adminUrl}
+                </code>
+              )}
+            </>
+          )}
         </div>
       )}
 

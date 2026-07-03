@@ -75,7 +75,7 @@ export default createRoute((c) => {
           </p>
           <a
             href="/create"
-            class="inline-block mt-12 border border-charcoal px-10 py-4 text-sm tracking-widest uppercase hover:bg-charcoal hover:text-ivory transition-colors"
+            class="inline-block mt-12 border border-marigold bg-marigold px-10 py-4 text-sm tracking-widest uppercase text-charcoal transition-colors hover:bg-marigold-dark hover:border-marigold-dark"
           >
             Create your event
           </a>
@@ -166,7 +166,7 @@ export default createRoute((c) => {
           </h2>
           <a
             href="/create"
-            class="inline-block mt-12 border border-charcoal px-10 py-4 text-sm tracking-widest uppercase hover:bg-charcoal hover:text-ivory transition-colors"
+            class="inline-block mt-12 border border-marigold bg-marigold px-10 py-4 text-sm tracking-widest uppercase text-charcoal transition-colors hover:bg-marigold-dark hover:border-marigold-dark"
           >
             Start now
           </a>

@@ -64,6 +64,17 @@ export async function hasAdminCookie(
 }
 
 /**
+ * The plaintext admin token from the request cookie, or null. The cookie holds
+ * the token itself (see the note above), so the server can hand the host back a
+ * recovery link — `${shareUrl}/admin?token=…` — without re-deriving a secret it
+ * only stores hashed. Callers MUST have authorized via {@link hasAdminCookie}
+ * first; this does no verification of its own.
+ */
+export function getAdminToken(c: Context, event: EventRow): string | null {
+  return getCookie(c, cookieName(event.id)) ?? null;
+}
+
+/**
  * Authorize an admin mutation from the request cookie. The API routes send the
  * cookie automatically (same origin); `SameSite=Strict` blocks the cross-site
  * case.

@@ -11,6 +11,15 @@
   --color-ivory: #fffdf7;
   --color-shagreen: #a8a08a;
 
+  /* Marigold — the one warm accent. Photography's chemical heritage (the
+   * amber of a darkroom safelight) rather than a cool corporate blue, so it
+   * sits inside the parchment/sand/taupe family instead of fighting it.
+   * Fill-only: charcoal text on marigold is 5.8:1 (AA), but marigold AS text
+   * on parchment is 1.8:1 — that failure is deliberate, it forces the accent
+   * to appear only as a filled primary action, never as body text or a link. */
+  --color-marigold: #e8a93c;
+  --color-marigold-dark: #d8922b;
+
   --font-heading: "Cormorant Garamond", Garamond, serif;
   --font-body: "DM Sans", "Helvetica Neue", sans-serif;
 
