@@ -1,7 +1,7 @@
 // Minimal service worker: enables PWA installability and a fast offline-ish
 // shell, without ever caching dynamic data. API and thumbnail requests always
 // go to the network so the gallery stays live.
-const CACHE = "oidh-v1";
+const CACHE = "oidh-v2";
 const SHELL = ["/", "/logo.svg", "/manifest.webmanifest"];
 
 self.addEventListener("install", (event) => {
@@ -34,7 +34,28 @@ self.addEventListener("fetch", (event) => {
   if (request.method !== "GET" || url.origin !== self.location.origin) return;
   if (url.pathname.startsWith("/api/")) return;
 
-  // Network-first, falling back to cache (e.g. offline), then to "/" for navigations.
+  // Immutable, content-hashed build assets (/static/*) are safe to serve
+  // cache-first: their filename changes when content changes, so a cached copy
+  // is never stale. This avoids a network hop in front of the CSS/JS on every
+  // navigation — the gap that caused a brief flash of unstyled content.
+  if (url.pathname.startsWith("/static/")) {
+    event.respondWith(
+      caches.match(request).then((cached) => {
+        if (cached) return cached;
+        return fetch(request).then((res) => {
+          if (res.ok && res.type === "basic") {
+            const copy = res.clone();
+            caches.open(CACHE).then((c) => c.put(request, copy));
+          }
+          return res;
+        });
+      }),
+    );
+    return;
+  }
+
+  // Everything else (the SSR HTML shell, icons) is dynamic: network-first,
+  // falling back to cache (e.g. offline), then to "/" for navigations.
   event.respondWith(
     fetch(request)
       .then((res) => {

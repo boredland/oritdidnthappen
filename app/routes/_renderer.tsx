@@ -63,6 +63,7 @@ export default jsxRenderer(
             href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300;400;500&family=DM+Sans:wght@400;500&display=swap"
             rel="stylesheet"
           />
+          <Link href="/app/style.css" rel="preload" as="style" />
           <Link href="/app/style.css" rel="stylesheet" />
           <Script src="/app/client.ts" async />
           {jsonLd ? (
