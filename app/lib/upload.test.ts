@@ -2,8 +2,11 @@ import { describe, expect, it } from "vitest";
 import {
   aggregateProgress,
   classifyFile,
+  isRetryableStatus,
   mapPool,
   type ProgressJob,
+  retryDelayMs,
+  uploadTimeoutMs,
   VIDEO_CEILING_BYTES,
 } from "./upload";
 
@@ -229,5 +232,99 @@ describe("classifyFile", () => {
       ok: false,
       reason: "Too large",
     });
+  });
+});
+
+describe("isRetryableStatus", () => {
+  it("returns true for transient / retryable statuses", () => {
+    for (const s of [0, 408, 429, 500, 502, 503, 599, 600]) {
+      expect(isRetryableStatus(s)).toBe(true);
+    }
+  });
+
+  it("returns false for terminal statuses", () => {
+    for (const s of [200, 201, 400, 401, 403, 404, 409, 413, 415]) {
+      expect(isRetryableStatus(s)).toBe(false);
+    }
+  });
+
+  it("499 is terminal, 500 is retryable (boundary)", () => {
+    expect(isRetryableStatus(499)).toBe(false);
+    expect(isRetryableStatus(500)).toBe(true);
+  });
+});
+
+describe("retryDelayMs", () => {
+  it("floor: rand=()=>0 gives window/2 for each attempt", () => {
+    const rand = () => 0;
+    expect(retryDelayMs(0, rand)).toBe(250);
+    expect(retryDelayMs(1, rand)).toBe(500);
+    expect(retryDelayMs(2, rand)).toBe(1000);
+  });
+
+  it("ceiling: rand=()=>1 gives full window for each attempt", () => {
+    const rand = () => 1;
+    expect(retryDelayMs(0, rand)).toBe(500);
+    expect(retryDelayMs(1, rand)).toBe(1000);
+  });
+
+  it("monotonically non-decreasing across attempts 0..2 for fixed rand", () => {
+    const rand = () => 0.37;
+    const d0 = retryDelayMs(0, rand);
+    const d1 = retryDelayMs(1, rand);
+    const d2 = retryDelayMs(2, rand);
+    expect(d0).toBeLessThanOrEqual(d1);
+    expect(d1).toBeLessThanOrEqual(d2);
+  });
+
+  it("result is always an integer", () => {
+    const values = [0, 0.1, 0.25, 0.5, 0.75, 0.9, 1];
+    for (const r of values) {
+      for (let attempt = 0; attempt <= 2; attempt++) {
+        expect(Number.isInteger(retryDelayMs(attempt, () => r))).toBe(true);
+      }
+    }
+  });
+
+  it("jitter stays within [window/2, window] for spread of rand values", () => {
+    const randValues = [0, 0.1, 0.3, 0.5, 0.7, 0.9, 1];
+    for (let attempt = 0; attempt <= 2; attempt++) {
+      const window = 500 * 2 ** attempt;
+      for (const r of randValues) {
+        const delay = retryDelayMs(attempt, () => r);
+        expect(delay).toBeGreaterThanOrEqual(window / 2);
+        expect(delay).toBeLessThanOrEqual(window);
+      }
+    }
+  });
+});
+
+describe("uploadTimeoutMs", () => {
+  it("tiny files get the ~20_000ms setup floor", () => {
+    expect(uploadTimeoutMs(0)).toBe(20_000);
+    expect(uploadTimeoutMs(400)).toBe(20_010);
+  });
+
+  it("96MB video gets a generous multi-minute budget", () => {
+    const size = 96 * 1024 * 1024;
+    const timeout = uploadTimeoutMs(size);
+    expect(timeout).toBeGreaterThanOrEqual(20_000 + Math.ceil(size / 40));
+    expect(timeout).toBeGreaterThan(120_000);
+  });
+
+  it("monotonically non-decreasing in file size", () => {
+    const sizes = [0, 100, 1_000, 100_000, 10_000_000, 100_000_000];
+    let prev = 0;
+    for (const s of sizes) {
+      const t = uploadTimeoutMs(s);
+      expect(t).toBeGreaterThanOrEqual(prev);
+      prev = t;
+    }
+  });
+
+  it("result is always an integer", () => {
+    for (const s of [0, 1, 37, 400, 999, 1_000_000]) {
+      expect(Number.isInteger(uploadTimeoutMs(s))).toBe(true);
+    }
   });
 });

@@ -10,8 +10,12 @@ import { dampDrag, resolveSwipe } from "../lib/swipe";
 import {
   aggregateProgress,
   classifyFile,
+  isRetryableStatus,
   mapPool,
+  retryDelayMs,
   UPLOAD_CONCURRENCY,
+  UPLOAD_MAX_ATTEMPTS,
+  uploadTimeoutMs,
   VIDEO_ACCEPTED,
   VIDEO_DEFAULT_BYTES,
 } from "../lib/upload";
@@ -69,6 +73,8 @@ interface UploadJob {
   progress: number;
   status: UploadStatus;
   error?: string;
+  /** Current attempt number once a retry is in flight (≥2); unset on the first try. */
+  attempt?: number;
 }
 
 const POLL_MS = 10_000;
@@ -231,7 +237,6 @@ export default function GuestApp({
 
   const fileInput = useRef<HTMLInputElement | null>(null);
   const cameraInput = useRef<HTMLInputElement | null>(null);
-  const videoInput = useRef<HTMLInputElement | null>(null);
   // Polling keys off upload time (createdAt), independent of the display sort,
   // so new uploads are always caught regardless of their EXIF date.
   const sinceRef = useRef<number>(
@@ -482,15 +487,21 @@ export default function GuestApp({
       /* cosmetic — ignore */
     }
   };
-  const uploadOne = async (
+  type SendOutcome =
+    | { ok: true; photo?: PhotoItem }
+    | { ok: false; retryable: boolean; message: string };
+  // One transport attempt. Never rejects — every terminal and transient
+  // failure resolves as a tagged outcome so the retry loop stays branchless.
+  const sendUpload = (
     file: File,
     key: string,
     takenAt: number | null,
-    poster: Blob | null,
-  ) => {
-    const { promise, resolve } = Promise.withResolvers<void>();
+  ): Promise<SendOutcome> => {
+    const { promise, resolve } = Promise.withResolvers<SendOutcome>();
     const xhr = new XMLHttpRequest();
     xhr.open("POST", `/api/upload/${code}`);
+    // Sized to the file so only a stalled socket trips it, not a slow uplink.
+    xhr.timeout = uploadTimeoutMs(file.size);
     xhr.setRequestHeader(
       "Authorization",
       `Bearer ${session?.sessionToken ?? ""}`,
@@ -508,32 +519,67 @@ export default function GuestApp({
       if (xhr.status >= 200 && xhr.status < 300) {
         try {
           const data = JSON.parse(xhr.responseText) as { photo?: PhotoItem };
-          const p = data.photo;
-          if (p) {
-            setPhotos((prev) =>
-              prev.some((x) => x.id === p.id)
-                ? prev
-                : sortPhotos([...prev, p], sortRef.current ?? "taken"),
-            );
-            if (p.createdAt > (sinceRef.current ?? 0))
-              sinceRef.current = p.createdAt;
-            if (p.kind === "video" && poster) void uploadPoster(p.id, poster);
-          }
-          patchJob(key, { progress: 100, status: "done" });
+          resolve({ ok: true, photo: data.photo });
         } catch {
-          patchJob(key, { status: "error", error: "Bad response" });
+          // A 2xx we can't parse won't parse on a retry either — terminal.
+          resolve({ ok: false, retryable: false, message: "Bad response" });
         }
       } else {
-        patchJob(key, { status: "error", error: `Failed (${xhr.status})` });
+        resolve({
+          ok: false,
+          retryable: isRetryableStatus(xhr.status),
+          message: `Failed (${xhr.status})`,
+        });
       }
-      resolve();
     };
-    xhr.onerror = () => {
-      patchJob(key, { status: "error", error: "Network error" });
-      resolve();
-    };
+    xhr.onerror = () =>
+      resolve({ ok: false, retryable: true, message: "Network error" });
+    xhr.ontimeout = () =>
+      resolve({ ok: false, retryable: true, message: "Timed out" });
     xhr.send(file);
     return promise;
+  };
+  const uploadOne = async (
+    file: File,
+    key: string,
+    takenAt: number | null,
+    poster: Blob | null,
+  ) => {
+    for (let attempt = 0; attempt < UPLOAD_MAX_ATTEMPTS; attempt++) {
+      // A retry re-streams the whole file, so restart this file's bar and flag
+      // the attempt for the "Retrying…" hint. Safe against a lost success
+      // response: the server dedups by content hash and returns the existing
+      // row, so a re-send resolves to that photo rather than a duplicate.
+      if (attempt > 0) {
+        patchJob(key, {
+          status: "uploading",
+          progress: 0,
+          attempt: attempt + 1,
+          error: undefined,
+        });
+      }
+      const outcome = await sendUpload(file, key, takenAt);
+      if (outcome.ok) {
+        const p = outcome.photo;
+        if (p) {
+          setPhotos((prev) =>
+            prev.some((x) => x.id === p.id)
+              ? prev
+              : sortPhotos([...prev, p], sortRef.current ?? "taken"),
+          );
+          if (p.createdAt > (sinceRef.current ?? 0))
+            sinceRef.current = p.createdAt;
+          if (p.kind === "video" && poster) void uploadPoster(p.id, poster);
+        }
+        patchJob(key, { progress: 100, status: "done" });
+        return;
+      }
+      if (!outcome.retryable || attempt === UPLOAD_MAX_ATTEMPTS - 1) {
+        patchJob(key, { status: "error", error: outcome.message });
+        return;
+      }
+      await new Promise((r) => setTimeout(r, retryDelayMs(attempt)));
+    }
   };
 
   // When a batch settles (nothing left uploading) clear the finished jobs
@@ -993,29 +1039,6 @@ export default function GuestApp({
           >
             <CameraIcon size={18} class="text-charcoal" /> Take a photo
           </button>
-          {videosEnabled && (
-            <>
-              <input
-                ref={videoInput}
-                type="file"
-                accept="video/*"
-                capture="environment"
-                class="sr-only"
-                onChange={(e) => {
-                  const t = e.target as HTMLInputElement;
-                  if (t.files) void handleFiles(t.files);
-                  t.value = "";
-                }}
-              />
-              <button
-                type="button"
-                onClick={() => videoInput.current?.click()}
-                class="mt-3 flex w-full items-center justify-center gap-2 border border-charcoal py-3 text-sm uppercase tracking-widest text-charcoal transition-colors hover:bg-charcoal hover:text-ivory"
-              >
-                <VideoIcon size={18} class="" /> Record a video
-              </button>
-            </>
-          )}
         </div>
       )}
 
@@ -1083,6 +1106,18 @@ export default function GuestApp({
                       Keep this screen open until uploading finishes.
                     </p>
                   )}
+                  {(() => {
+                    const retrying = jobs.filter(
+                      (j) => j.status === "uploading" && j.attempt,
+                    ).length;
+                    return retrying > 0 ? (
+                      <p class="mt-1 text-[11px] text-taupe">
+                        {retrying === 1
+                          ? "Retrying a failed upload…"
+                          : `Retrying ${retrying} failed uploads…`}
+                      </p>
+                    ) : null;
+                  })()}
                 </div>
               )}
               {errors.map((job) => (
@@ -1657,40 +1692,6 @@ function CameraIcon({
         r="3.4"
         stroke="currentColor"
         stroke-width="1.1"
-      />
-    </svg>
-  );
-}
-
-function VideoIcon({
-  size = 36,
-  class: cls = "mx-auto text-taupe",
-}: {
-  size?: number;
-  class?: string;
-}) {
-  return (
-    <svg
-      width={size}
-      height={size}
-      viewBox="0 0 24 24"
-      fill="none"
-      class={cls}
-      aria-hidden="true"
-    >
-      <rect
-        x="2.5"
-        y="7"
-        width="12.5"
-        height="10"
-        stroke="currentColor"
-        stroke-width="1.1"
-      />
-      <path
-        d="M15 10.5 21 7.5V16.5L15 13.5"
-        stroke="currentColor"
-        stroke-width="1.1"
-        stroke-linejoin="round"
       />
     </svg>
   );

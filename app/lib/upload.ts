@@ -30,6 +30,47 @@ export async function mapPool<T>(
   await Promise.all(workers);
 }
 
+/** Total upload attempts before a file is surfaced as failed (initial try + retries). */
+export const UPLOAD_MAX_ATTEMPTS = 3;
+
+/**
+ * Statuses worth retrying: a synthetic 0 (network error / timeout — no response
+ * reached the client), request-timeout, rate-limit, and any 5xx (the upload
+ * route surfaces provider/storage failures as 500). Everything else — auth
+ * (401/403), missing event (404), too-large (413), bad type (415) — is a
+ * permanent verdict a retry would only repeat, so it fails fast.
+ */
+export function isRetryableStatus(status: number): boolean {
+  return status === 0 || status === 408 || status === 429 || status >= 500;
+}
+
+/**
+ * Backoff before retry attempt `n` (0-based): an exponentially doubling window
+ * (500ms, 1s, 2s, …) with equal jitter — half fixed, half random — so a batch
+ * of siblings dropped by the same flaky uplink don't all retry in lockstep and
+ * re-collide. `rand` is injectable so tests are deterministic.
+ */
+export function retryDelayMs(
+  attempt: number,
+  rand: () => number = Math.random,
+): number {
+  const window = 500 * 2 ** attempt;
+  return Math.round(window / 2 + (window / 2) * rand());
+}
+
+/**
+ * Total-request timeout for an upload of `sizeBytes`. XHR's `timeout` caps the
+ * whole request (there is no idle timer), so we budget a deliberately generous
+ * floor throughput (~40 kB/s, weak-mobile territory) plus fixed setup headroom:
+ * only a stalled half-open socket that never fires `onerror` trips it, never a
+ * legitimately slow uplink — which would otherwise retry from zero and re-fail.
+ */
+export function uploadTimeoutMs(sizeBytes: number): number {
+  const FLOOR_BYTES_PER_MS = 40;
+  const SETUP_MS = 20_000;
+  return SETUP_MS + Math.ceil(sizeBytes / FLOOR_BYTES_PER_MS);
+}
+
 export type AggregateStatus = "uploading" | "done" | "error";
 
 export interface ProgressJob {
