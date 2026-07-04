@@ -959,6 +959,15 @@ export default function GuestApp({
           {photos.length > 0 && (
             <button
               type="button"
+              onClick={onShareGallery}
+              class="inline-flex items-center gap-1.5 border border-charcoal px-5 py-2 text-sm uppercase tracking-widest text-charcoal transition-colors hover:bg-charcoal hover:text-ivory"
+            >
+              <ShareIcon /> Share
+            </button>
+          )}
+          {photos.length > 0 && (
+            <button
+              type="button"
               onClick={downloadAll}
               disabled={downloading}
               class="inline-flex items-center gap-1.5 border border-charcoal px-5 py-2 text-sm uppercase tracking-widest text-charcoal transition-colors hover:bg-charcoal hover:text-ivory disabled:opacity-50"
@@ -1137,15 +1146,6 @@ export default function GuestApp({
           <span class="text-charcoal-light">
             {photos.length} {photos.length === 1 ? "photo" : "photos"}
           </span>
-          {photos.length > 0 && (
-            <button
-              type="button"
-              onClick={onShareGallery}
-              class="inline-flex items-center gap-1.5 text-charcoal-light hover:text-charcoal transition-colors"
-            >
-              <ShareIcon /> Share
-            </button>
-          )}
           {push !== "unsupported" && !closed && (
             <button
               type="button"
