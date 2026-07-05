@@ -2,6 +2,7 @@ import { downloadZip } from "client-zip";
 import { useCallback, useEffect, useRef, useState } from "hono/jsx";
 import encodeQR from "qr";
 import { readTakenAt } from "../lib/exif";
+import { GUESTBOOK_MAX_LEN, sanitizeGuestbookBody } from "../lib/guestbook";
 import { thumbUrl } from "../lib/media-url";
 import { generatePoster } from "../lib/poster";
 import { prefetchMedia } from "../lib/prefetch";
@@ -26,6 +27,13 @@ export interface PhotoItem {
   createdAt: number;
   takenAt: number | null;
   kind: "image" | "video";
+}
+
+export interface GuestbookItem {
+  id: string;
+  username: string;
+  body: string;
+  createdAt: number;
 }
 
 export type SortMode = "added" | "taken";
@@ -54,6 +62,7 @@ interface Props {
   code: string;
   closed: boolean;
   initialPhotos: PhotoItem[];
+  initialGuestbook: GuestbookItem[];
   initialHasMore: boolean;
   videosEnabled: boolean;
   videoMaxBytes: number | null;
@@ -200,6 +209,7 @@ export default function GuestApp({
   code,
   closed: initialClosed,
   initialPhotos,
+  initialGuestbook,
   initialHasMore,
   videosEnabled,
   videoMaxBytes,
@@ -226,6 +236,11 @@ export default function GuestApp({
   const [downloading, setDownloading] = useState(false);
   const [hasMore, setHasMore] = useState(initialHasMore);
   const [loadingMore, setLoadingMore] = useState(false);
+  const [guestbook, setGuestbook] = useState<GuestbookItem[]>(
+    () => initialGuestbook,
+  );
+  const [gbDraft, setGbDraft] = useState("");
+  const [gbPosting, setGbPosting] = useState(false);
   const loadMoreSentinel = useRef<HTMLDivElement | null>(null);
   // A load-more fetch and a poll can race; a ref guards against overlapping
   // page fetches without waiting on the async setLoadingMore render.
@@ -304,6 +319,47 @@ export default function GuestApp({
     [code, storageKey],
   );
 
+  // Rename in place via the guest's session — the server UPDATEs the guests
+  // row, so photos and guestbook entries (joined on guest_id) follow the new
+  // name. Optimistically relabel the current guest's rows too so the change
+  // shows instantly without waiting for the next poll.
+  const renameGuest = useCallback(
+    async (desired: string): Promise<boolean> => {
+      if (!session) return false;
+      const old = session.username;
+      try {
+        const turnstileToken = await getToken();
+        const res = await fetch(`/api/event/${code}/username`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${session.sessionToken}`,
+          },
+          body: JSON.stringify({ username: desired, turnstileToken }),
+        });
+        if (!res.ok) return false;
+        const data = (await res.json()) as { username: string };
+        const next = { ...session, username: data.username };
+        localStorage.setItem(storageKey, JSON.stringify(next));
+        setSession(next);
+        setPhotos((prev) =>
+          prev.map((p) =>
+            p.username === old ? { ...p, username: data.username } : p,
+          ),
+        );
+        setGuestbook((prev) =>
+          prev.map((e) =>
+            e.username === old ? { ...e, username: data.username } : e,
+          ),
+        );
+        return true;
+      } catch {
+        return false;
+      }
+    },
+    [code, session, storageKey],
+  );
+
   // A single poll for photos uploaded by other guests. `force` bypasses the
   // hidden-tab guard for an on-demand refresh (e.g. a push just arrived).
   const poll = useCallback(
@@ -340,13 +396,61 @@ export default function GuestApp({
     [code],
   );
 
+  // Pull the full guestbook (small, capped list) and merge by id so an
+  // optimistic local entry and the fetched copy never double up.
+  const refreshGuestbook = useCallback(async () => {
+    try {
+      const res = await fetch(`/api/guestbook/${code}`);
+      if (!res.ok) return;
+      const data = (await res.json()) as { entries: GuestbookItem[] };
+      setGuestbook(data.entries);
+    } catch {
+      /* transient network error — the next trigger retries */
+    }
+  }, [code]);
+
+  const postGuestbook = useCallback(async () => {
+    const clean = sanitizeGuestbookBody(gbDraft);
+    if (!clean || gbPosting) return;
+    setGbPosting(true);
+    try {
+      const res = await fetch(`/api/guestbook/${code}`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(session
+            ? { Authorization: `Bearer ${session.sessionToken}` }
+            : {}),
+        },
+        body: JSON.stringify({ body: clean }),
+      });
+      if (!res.ok) {
+        flashMsg("Couldn't post your message.");
+        return;
+      }
+      const data = (await res.json()) as { entry: GuestbookItem };
+      setGuestbook((prev) =>
+        prev.some((e) => e.id === data.entry.id) ? prev : [data.entry, ...prev],
+      );
+      setGbDraft("");
+    } catch {
+      flashMsg("Couldn't post your message.");
+    } finally {
+      setGbPosting(false);
+    }
+  }, [code, gbDraft, gbPosting, session]);
+
   // Poll on an interval; pause while the event is closed. Skips work when the
   // tab is hidden (the poll's own guard) to spare a backgrounded phone.
   useEffect(() => {
     if (closed) return;
-    const timer = window.setInterval(() => void poll(), POLL_MS);
+    const timer = window.setInterval(() => {
+      if (document.hidden) return;
+      void poll();
+      void refreshGuestbook();
+    }, POLL_MS);
     return () => window.clearInterval(timer);
-  }, [closed, poll]);
+  }, [closed, poll, refreshGuestbook]);
 
   // A push notification for THIS event nudges an immediate refresh, so a
   // foreground gallery updates the instant a photo lands instead of waiting
@@ -355,14 +459,14 @@ export default function GuestApp({
     if (!("serviceWorker" in navigator)) return;
     const onMessage = (e: MessageEvent) => {
       const d = e.data;
-      if (d && d.type === "photos-updated" && d.eventId === code) {
-        void poll(true);
-      }
+      if (!d || d.eventId !== code) return;
+      if (d.type === "photos-updated") void poll(true);
+      else if (d.type === "guestbook-updated") void refreshGuestbook();
     };
     navigator.serviceWorker.addEventListener("message", onMessage);
     return () =>
       navigator.serviceWorker.removeEventListener("message", onMessage);
-  }, [code, poll]);
+  }, [code, poll, refreshGuestbook]);
 
   // Warn before navigating away mid-upload: uploads run on this page, so
   // closing it aborts anything in flight (unless Background Fetch took over).
@@ -941,9 +1045,10 @@ export default function GuestApp({
 
   return (
     <div>
-      {/* Always mounted so both first-time registration and username changes
-          (both hit the Turnstile-gated /api/register) can render a challenge.
-          Empty and invisible until Turnstile draws an interactive challenge. */}
+      {/* Always mounted so both first-time registration (/api/register) and
+          username changes (/api/event/:code/username), each Turnstile-gated,
+          can render a challenge. Empty and invisible until Turnstile draws an
+          interactive challenge. */}
       <div ref={turnstileRef} class="flex justify-center empty:hidden" />
       {(!closed || photos.length > 0) && (
         <div class="mb-8 flex justify-center gap-3">
@@ -977,6 +1082,17 @@ export default function GuestApp({
           )}
         </div>
       )}
+
+      <div id="guestbook">
+        <GuestBook
+          entries={guestbook}
+          draft={gbDraft}
+          onDraft={setGbDraft}
+          onPost={postGuestbook}
+          posting={gbPosting}
+          canSign={!closed && !!session}
+        />
+      </div>
       {!closed && session && (
         <div class="max-w-2xl mx-auto">
           {/* biome-ignore lint/a11y/useSemanticElements: contains <input> — can't be <button> */}
@@ -1196,7 +1312,7 @@ export default function GuestApp({
             onEdit={() => setEditingName(true)}
             onCancel={() => setEditingName(false)}
             onSave={async (name) => {
-              const ok = await registerGuest(name);
+              const ok = await renameGuest(name);
               setEditingName(false);
               if (!ok) flashMsg("That name is taken or invalid.");
             }}
@@ -1296,6 +1412,106 @@ export default function GuestApp({
         </div>
       )}
     </div>
+  );
+}
+
+// Compact relative time ("just now", "5m", "3h", "2d"), falling back to a
+// short date past a week so old entries stay readable.
+function timeAgo(unixSecs: number): string {
+  const diff = Math.floor(Date.now() / 1000) - unixSecs;
+  if (diff < 60) return "just now";
+  if (diff < 3600) return `${Math.floor(diff / 60)}m`;
+  if (diff < 86400) return `${Math.floor(diff / 3600)}h`;
+  if (diff < 604800) return `${Math.floor(diff / 86400)}d`;
+  return new Date(unixSecs * 1000).toLocaleDateString(undefined, {
+    month: "short",
+    day: "numeric",
+  });
+}
+
+function GuestBook({
+  entries,
+  draft,
+  onDraft,
+  onPost,
+  posting,
+  canSign,
+}: {
+  entries: GuestbookItem[];
+  draft: string;
+  onDraft: (v: string) => void;
+  onPost: () => void;
+  posting: boolean;
+  canSign: boolean;
+}) {
+  const remaining = GUESTBOOK_MAX_LEN - draft.length;
+  const canPost = canSign && !posting && draft.trim().length > 0;
+  return (
+    <section
+      aria-label="Guestbook"
+      class="mx-auto mb-8 max-w-2xl border border-sand bg-parchment-light"
+    >
+      <h2 class="border-b border-sand/70 px-4 py-3 font-heading text-lg font-light tracking-wide text-charcoal">
+        Guestbook
+      </h2>
+      {canSign && (
+        <div class="border-b border-sand/70 p-4">
+          <textarea
+            value={draft}
+            maxlength={GUESTBOOK_MAX_LEN}
+            rows={2}
+            placeholder="Leave a note for the host…"
+            onInput={(e) => onDraft((e.target as HTMLTextAreaElement).value)}
+            onKeyDown={(e: KeyboardEvent) => {
+              // Enter posts; Shift+Enter for a newline.
+              if (e.key === "Enter" && !e.shiftKey) {
+                e.preventDefault();
+                if (canPost) onPost();
+              }
+            }}
+            class="w-full resize-none border border-sand bg-parchment-light px-3 py-2 text-sm text-charcoal focus:border-charcoal focus:outline-none"
+          />
+          <div class="mt-2 flex items-center justify-between">
+            <span
+              class={`text-xs ${remaining < 20 ? "text-shagreen" : "text-taupe"}`}
+            >
+              {remaining}
+            </span>
+            <button
+              type="button"
+              onClick={onPost}
+              disabled={!canPost}
+              class="border border-charcoal px-4 py-1.5 text-xs uppercase tracking-widest text-charcoal transition-colors hover:bg-charcoal hover:text-ivory disabled:opacity-40"
+            >
+              {posting ? "Signing…" : "Sign"}
+            </button>
+          </div>
+        </div>
+      )}
+      {entries.length === 0 ? (
+        <p class="px-4 py-6 text-center text-sm text-taupe">
+          No messages yet. Be the first to sign.
+        </p>
+      ) : (
+        <ul class="max-h-60 divide-y divide-sand/50 overflow-y-auto">
+          {entries.map((e) => (
+            <li key={e.id} class="px-4 py-3">
+              <div class="flex items-baseline justify-between gap-3">
+                <span class="text-sm font-medium text-charcoal">
+                  {e.username}
+                </span>
+                <span class="shrink-0 text-xs text-taupe">
+                  {timeAgo(e.createdAt)}
+                </span>
+              </div>
+              <p class="mt-1 whitespace-pre-wrap break-words text-sm text-charcoal-light">
+                {e.body}
+              </p>
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
   );
 }
 

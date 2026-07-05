@@ -1,7 +1,14 @@
 import { createRoute } from "honox/factory";
 import GalleryTracker from "../../../islands/GalleryTracker";
-import GuestApp, { type PhotoItem } from "../../../islands/GuestApp";
-import { getEventByCode, getPhotosPage } from "../../../lib/db";
+import GuestApp, {
+  type GuestbookItem,
+  type PhotoItem,
+} from "../../../islands/GuestApp";
+import {
+  getEventByCode,
+  getGuestbookEntries,
+  getPhotosPage,
+} from "../../../lib/db";
 import { thumbUrl } from "../../../lib/media-url";
 
 export default createRoute(async (c) => {
@@ -25,6 +32,14 @@ export default createRoute(async (c) => {
     createdAt: p.created_at,
     takenAt: p.taken_at,
     kind: p.mime_type.startsWith("video/") ? "video" : "image",
+  }));
+
+  const guestbookRows = await getGuestbookEntries(c.env.DB, event.id);
+  const initialGuestbook: GuestbookItem[] = guestbookRows.map((e) => ({
+    id: e.id,
+    username: e.username,
+    body: e.body,
+    createdAt: e.created_at,
   }));
 
   const coverUrl = event.cover_photo_id
@@ -66,6 +81,7 @@ export default createRoute(async (c) => {
         code={event.id}
         closed={closed}
         initialPhotos={initialPhotos}
+        initialGuestbook={initialGuestbook}
         initialHasMore={initialHasMore}
         videosEnabled={event.videos_enabled === 1}
         videoMaxBytes={event.video_max_bytes}

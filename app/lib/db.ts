@@ -217,6 +217,79 @@ export async function countGuests(
   return row?.n ?? 0;
 }
 
+/**
+ * Rename a guest in place. Because photos and guestbook entries join on
+ * guest_id, every past contribution follows the new name. Returns false when
+ * the new username collides with another guest in the same event.
+ */
+export async function updateGuestUsername(
+  db: D1Database,
+  eventId: string,
+  guestId: string,
+  username: string,
+): Promise<boolean> {
+  const res = await db
+    .prepare(
+      `UPDATE guests SET username = ?
+       WHERE id = ? AND event_id = ?
+       AND NOT EXISTS (
+         SELECT 1 FROM guests
+         WHERE event_id = ? AND username = ? AND id != ?
+       )`,
+    )
+    .bind(username, guestId, eventId, eventId, username, guestId)
+    .run();
+  return (res.meta?.changes ?? 0) > 0;
+}
+
+export interface GuestbookEntry {
+  id: string;
+  event_id: string;
+  guest_id: string;
+  body: string;
+  created_at: number;
+  username: string;
+}
+
+export async function addGuestbookEntry(
+  db: D1Database,
+  e: {
+    id: string;
+    event_id: string;
+    guest_id: string;
+    body: string;
+  },
+): Promise<number> {
+  const row = await db
+    .prepare(
+      `INSERT INTO guestbook (id, event_id, guest_id, body)
+       VALUES (?, ?, ?, ?)
+       RETURNING created_at`,
+    )
+    .bind(e.id, e.event_id, e.guest_id, e.body)
+    .first<{ created_at: number }>();
+  return row?.created_at ?? Math.floor(Date.now() / 1000);
+}
+
+/** An event's guestbook entries, newest-first, with the author's current name. */
+export async function getGuestbookEntries(
+  db: D1Database,
+  eventId: string,
+  limit = 100,
+): Promise<GuestbookEntry[]> {
+  const { results } = await db
+    .prepare(
+      `SELECT b.*, g.username
+       FROM guestbook b JOIN guests g ON g.id = b.guest_id
+       WHERE b.event_id = ?
+       ORDER BY b.created_at DESC, b.id DESC
+       LIMIT ?`,
+    )
+    .bind(eventId, limit)
+    .all<GuestbookEntry>();
+  return results ?? [];
+}
+
 export async function addPhoto(
   db: D1Database,
   p: {
@@ -537,6 +610,7 @@ export async function deleteEvent(
     db
       .prepare(`DELETE FROM push_subscriptions WHERE event_id = ?`)
       .bind(eventId),
+    db.prepare(`DELETE FROM guestbook WHERE event_id = ?`).bind(eventId),
     db.prepare(`DELETE FROM guests WHERE event_id = ?`).bind(eventId),
     db.prepare(`DELETE FROM events WHERE id = ?`).bind(eventId),
   ]);
@@ -582,6 +656,9 @@ export async function deleteEvents(
       .prepare(
         `DELETE FROM push_subscriptions WHERE event_id IN (${placeholders})`,
       )
+      .bind(...eventIds),
+    db
+      .prepare(`DELETE FROM guestbook WHERE event_id IN (${placeholders})`)
       .bind(...eventIds),
     db
       .prepare(`DELETE FROM guests WHERE event_id IN (${placeholders})`)

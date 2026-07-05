@@ -1,7 +1,7 @@
 // Minimal service worker: enables PWA installability and a fast offline-ish
 // shell, without ever caching dynamic data. API and thumbnail requests always
 // go to the network so the gallery stays live.
-const CACHE = "oidh-v2";
+const CACHE = "oidh-v3";
 const SHELL = ["/", "/logo.svg", "/manifest.webmanifest"];
 
 self.addEventListener("install", (event) => {
@@ -98,8 +98,17 @@ self.addEventListener("push", (event) => {
       // Nudge any open gallery for this event to refresh immediately, BEFORE
       // (and independent of) the notification — a missing notification
       // permission or a showNotification failure must never suppress the live
-      // refresh. Event id is carried in the tag ("event-<id>").
-      const eventId = tag.indexOf("event-") === 0 ? tag.slice(6) : null;
+      // refresh. The event id and refresh kind are carried in the tag:
+      // "event-<id>" for new photos, "guestbook-<id>" for guestbook entries.
+      let eventId = null;
+      let refreshType = null;
+      if (tag.indexOf("event-") === 0) {
+        eventId = tag.slice(6);
+        refreshType = "photos-updated";
+      } else if (tag.indexOf("guestbook-") === 0) {
+        eventId = tag.slice(10);
+        refreshType = "guestbook-updated";
+      }
       if (eventId) {
         try {
           const windows = await self.clients.matchAll({
@@ -107,7 +116,7 @@ self.addEventListener("push", (event) => {
             includeUncontrolled: true,
           });
           for (const win of windows) {
-            win.postMessage({ type: "photos-updated", eventId: eventId });
+            win.postMessage({ type: refreshType, eventId: eventId });
           }
         } catch (_) {}
       }

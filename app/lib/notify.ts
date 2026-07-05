@@ -61,3 +61,47 @@ export async function notifyNewPhotos(
     }),
   );
 }
+
+/**
+ * Notify everyone subscribed to an event that someone signed the guestbook.
+ * Best-effort like notifyNewPhotos: run inside `ctx.waitUntil`. Uses a distinct
+ * tag ("guestbook-<id>") so the client refreshes the guestbook, not the grid.
+ */
+export async function notifyNewGuestbookEntry(
+  env: Bindings,
+  event: EventRow,
+  author: string,
+): Promise<void> {
+  const vapid = vapidFromEnv(env);
+  if (!vapid) return;
+
+  const subs = await getEventSubscriptions(env.DB, event.id);
+  if (subs.length === 0) return;
+
+  const payload = JSON.stringify({
+    title: event.title,
+    body: `${author} signed the guestbook.`,
+    url: `${env.BASE_URL}/event/${event.id}#guestbook`,
+    tag: `guestbook-${event.id}`,
+  });
+
+  await Promise.all(
+    subs.map(async (s) => {
+      try {
+        const res = await sendPush(
+          { endpoint: s.endpoint, keys: { p256dh: s.p256dh, auth: s.auth } },
+          payload,
+          vapid,
+          {
+            urgency: "normal",
+            topic: `guestbook-${event.id}`,
+            ttl: 60 * 60 * 12,
+          },
+        );
+        if (res.gone) await deleteSubscriptionById(env.DB, s.id);
+      } catch (e) {
+        console.error("push send failed:", e);
+      }
+    }),
+  );
+}
