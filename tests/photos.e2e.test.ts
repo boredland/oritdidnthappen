@@ -33,9 +33,9 @@ async function insertPhoto(
   eventId: string,
   guestId: string,
   createdAt: number,
-  opts: { mime?: string; hash?: string } = {},
+  opts: { mime?: string; hash?: string; id?: string } = {},
 ): Promise<string> {
-  const id = `ph${seq++}`;
+  const id = opts.id ?? `ph${seq++}`;
   await h.db
     .prepare(
       `INSERT INTO photos (id,event_id,guest_id,file_ref,filename,mime_type,size_bytes,created_at,content_hash)
@@ -83,6 +83,36 @@ describe("GET /api/photos/:code — initial page", () => {
     );
     expect(page2.body.photos.map((p) => p.id)).toEqual([ids[2], ids[1]]);
     expect(page2.body.hasMore).toBe(true);
+  });
+
+  it("paginates past ids containing an underscore", async () => {
+    // Real ids come from a URL-safe alphabet that includes "_", so roughly one
+    // in five contains one; `ph0`-style fixtures never caught that the cursor
+    // was split on the LAST underscore, which mangled the id, produced a NaN
+    // timestamp, and silently re-served page 1.
+    const { id } = await seedEvent(h);
+    const g = await seedGuest(h, id);
+    const base = 1_700_000_000;
+    const ids: string[] = [];
+    // The underscore id must be the NEWEST row, since that is the one the
+    // cursor gets built from — an underscore-free cursor splits identically
+    // either way and proves nothing.
+    for (const forced of ["Q99lwKecCv4h9edF", "z6KlcBlMYnXDyM_b"]) {
+      ids.push(await insertPhoto(id, g.id, base + ids.length, { id: forced }));
+    }
+
+    const first = await h.getJson<PageResponse>(`/api/photos/${id}?limit=1`);
+    expect(first.body.photos[0].id).toBe(ids[1]);
+    expect(first.body.hasMore).toBe(true);
+
+    const last = first.body.photos[0];
+    const cursor = `${last.createdAt}_${last.id}`;
+    const page2 = await h.getJson<PageResponse>(
+      `/api/photos/${id}?limit=1&cursor=${encodeURIComponent(cursor)}`,
+    );
+    // The underscore id must be reached, not page 1 handed back again.
+    expect(page2.body.photos.map((p) => p.id)).toEqual([ids[0]]);
+    expect(page2.body.hasMore).toBe(false);
   });
 
   it("reports hasMore=false on the last page", async () => {

@@ -862,6 +862,7 @@ export default function GuestApp({
     setDownloading(true);
     try {
       const ids: string[] = [];
+      const seen = new Set<string>();
       let cursor: string | null = null;
       for (;;) {
         const res = await fetch(
@@ -872,7 +873,15 @@ export default function GuestApp({
           photos: { id: string; createdAt: number }[];
           hasMore: boolean;
         };
-        for (const p of data.photos) ids.push(p.id);
+        // Stop if a page repeats ids we already hold. `hasMore` alone is the
+        // server's word for it, and a cursor it cannot parse makes it hand back
+        // page 1 forever — an unbounded fetch loop against our own API.
+        const fresh = data.photos.filter((p) => !seen.has(p.id));
+        if (fresh.length === 0) break;
+        for (const p of fresh) {
+          seen.add(p.id);
+          ids.push(p.id);
+        }
         const last = data.photos[data.photos.length - 1];
         if (!data.hasMore || !last) break;
         cursor = `${last.createdAt}_${last.id}`;

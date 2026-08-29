@@ -30,11 +30,15 @@ export default createRoute(async (c) => {
 
   // Initial / paginated load, newest-first, via keyset cursor. `cursor` is
   // "<createdAt>_<id>" of the last row the client already has; absent = page 1.
+  // Split on the FIRST underscore, not the last: the timestamp is digits-only,
+  // but ids come from a URL-safe alphabet that includes "_", so `lastIndexOf`
+  // sliced a real id in half, produced a NaN timestamp, and silently fell back
+  // to page 1 — leaving `downloadAll` re-fetching page 1 forever.
   const limit = Math.min(Number(c.req.query("limit")) || 30, 100);
   const cursorParam = c.req.query("cursor");
   let cursor: { createdAt: number; id: string } | null = null;
   if (cursorParam) {
-    const sep = cursorParam.lastIndexOf("_");
+    const sep = cursorParam.indexOf("_");
     if (sep > 0) {
       const createdAt = Number(cursorParam.slice(0, sep));
       const id = cursorParam.slice(sep + 1);
